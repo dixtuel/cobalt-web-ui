@@ -88,33 +88,12 @@ a { color: inherit; }
 
 .brand { display: flex; align-items: center; gap: 12px; }
 
-/* Signature mark: a periodic-table element tile for Co (Cobalt, Z=27) */
-.element-tile {
-  width: 44px;
-  height: 44px;
+/* Signature mark: gradient rounded-square logo with a download arrow */
+.brand-mark {
   flex-shrink: 0;
   border-radius: 9px;
-  background: linear-gradient(150deg, var(--cobalt) 0%, var(--cobalt-deep) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 6px 18px rgba(37, 71, 201, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 4px 5px;
-  position: relative;
-  overflow: hidden;
+  filter: drop-shadow(0 6px 18px rgba(37, 71, 201, 0.35));
 }
-
-.element-tile::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(115deg, rgba(255, 255, 255, 0.25) 0%, transparent 30%, transparent 70%, rgba(255, 255, 255, 0.08) 100%);
-}
-
-.element-tile .z { font-family: var(--mono); font-size: 0.5rem; color: rgba(255, 255, 255, 0.75); line-height: 1; }
-.element-tile .sym { font-family: var(--display); font-size: 1.05rem; font-weight: 700; color: #fff; line-height: 1; }
-.element-tile .name { font-family: var(--mono); font-size: 0.36rem; letter-spacing: 0.02em; color: rgba(255, 255, 255, 0.65); text-transform: uppercase; line-height: 1; }
 
 .brand-text { display: flex; flex-direction: column; gap: 1px; }
 
@@ -313,6 +292,14 @@ a { color: inherit; }
 @media (max-width: 480px) {
   .mode-selector { flex-direction: column; }
   .options-row { grid-template-columns: 1fr; }
+
+  /* Mobilde reklam alanı: masaüstündeki kenar reklamları zaten gizli (bkz. .ad-rail),
+     tek reklam burada, araç kartının dışında ve ayrı bir bölüm gibi durur — indirme
+     akışına karışmaz. */
+  .ad-slot:not(.ad-slot-rail) {
+    min-height: 70px;
+    margin: 2px 0 0;
+  }
 }
 
 .option-item { display: flex; flex-direction: column; gap: 6px; }

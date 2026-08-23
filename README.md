@@ -1,23 +1,25 @@
-# Cobalt Web UI
+# Downloader — Cobalt Web UI
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
-[![Live Demo](https://img.shields.io/badge/Live-cobalt.dxtl.com.tr-green.svg?style=flat-square)](https://cobalt.dxtl.com.tr)
+[![Live Demo](https://img.shields.io/badge/Live-downloader.dxtl.com.tr-green.svg?style=flat-square)](https://downloader.dxtl.com.tr)
 
-[imputnet/cobalt](https://github.com/imputnet/cobalt) API'si için bağımsız, özgün bir web arayüzü. Node.js tabanlı, hafif, kodu yok basit ve production-ready.
+[imputnet/cobalt](https://github.com/imputnet/cobalt) API'si için bağımsız, özgün bir web arayüzü — "**Downloader**" markasıyla yayınlanır. Node.js tabanlı, hafif, harici bağımlılığı yok, production-ready.
 
 ## Özellikler
 
 - **Basit ve hızlı:** Node.js built-in modülleri, harici bağımlılık yok
 - **Responsive tasarım:** Mobil ve masaüstü cihazlarda sorunsuz çalışır
-- **Türkçe arayüz:** Tamamı Türkçe, "Kobalt" element temalı
+- **Türkçe arayüz:** Tamamı Türkçe, KVKK uyumlu gizlilik politikası
 - **Proxy route'ları:** `/api`, `/tunnel`, `/tiktok-api`, `/media-stream` aracılığıyla Cobalt API'sine erişim
+- **AdSense hazır:** `.env` ile yapılandırılabilir reklam alanları (bkz. aşağıda)
+- **SEO hazır:** `robots.txt`, `sitemap.xml`, Open Graph / Twitter Card meta etiketleri
 - **Docker desteği:** Self-host için `docker-compose.yml` örneği dahil
 - **MIT Lisansı:** Özgürce kullan, değiştir, dağıt
 
 ## Canlı Demo
 
-Arayüz şu adreste canlı olarak çalışmaktadır:
-**https://cobalt.dxtl.com.tr**
+Arayüz "Downloader" adıyla şu adreste canlı olarak çalışmaktadır:
+**https://downloader.dxtl.com.tr**
 
 ## Self-Host Kurulumu
 
