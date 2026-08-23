@@ -18,7 +18,7 @@
 // ağına şeffaf giremez, ama kendi fetch()/requests çağrılarımız için işe yarar.
 //
 // Kullanım:
-//   fetch("https://downloader-egress-relay.dixtuel.deno.net/<path>", {
+//   fetch("https://your-relay-project.deno.net/<path>", {
 //     headers: {
 //       "x-target-host": "https://example.com",
 //       "x-proxy-secret": "<RELAY_SECRET>",
