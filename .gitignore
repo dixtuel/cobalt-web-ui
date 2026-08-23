@@ -44,3 +44,8 @@ build/
 html/google*.html
 html/BingSiteAuth.xml
 html/yandex_*.html
+
+# AI asistan kılavuzları — yalnız yerel geliştirme notu, public repoya girmez
+AGENTS.md
+CLAUDE.md
+GEMINI.md
