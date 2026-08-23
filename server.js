@@ -122,8 +122,16 @@ const server = http.createServer(async (req, res) => {
       if (req.headers['range']) fetchHeaders['Range'] = req.headers['range'];
       if (req.headers['if-range']) fetchHeaders['If-Range'] = req.headers['if-range'];
 
+      let fetchMethod = req.method;
+      // Bazı CDN'ler (Google, TikTok) gövdesiz HEAD isteğinde Content-Length: 0 döner.
+      // HEAD isteğinde Range yoksa bytes=0-0 GET ile sorgulayıp Content-Range'den toplam boyutu çekeriz.
+      if (req.method === 'HEAD' && !fetchHeaders['Range']) {
+        fetchMethod = 'GET';
+        fetchHeaders['Range'] = 'bytes=0-0';
+      }
+
       const mediaRes = await egressFetch(targetUrl, {
-        method: req.method,
+        method: fetchMethod,
         headers: fetchHeaders
       });
 
@@ -209,7 +217,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const contentType = MEDIA_TYPES[ext] || upstreamContentType || 'application/octet-stream';
-      const cleanAscii = targetFilename.replace(/[^\w\s\u00C0-\u017F.-]/gi, '_');
+      const cleanAscii = targetFilename.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_');
 
       const headers = {
         'Content-Type': contentType,
@@ -219,13 +227,23 @@ const server = http.createServer(async (req, res) => {
         'Accept-Ranges': 'bytes'
       };
 
+      let finalStatus = mediaRes.status;
+      let contentLength = mediaRes.headers.get('content-length');
+      let contentRange = mediaRes.headers.get('content-range');
+
+      // İstemci yalın HEAD attıysa ve upstream'den 206 bytes 0-0/TOTAL geldiyse bunu 200 + TOTAL uzunluk olarak ilet
+      if (req.method === 'HEAD' && !req.headers['range'] && contentRange) {
+        finalStatus = 200;
+        const total = contentRange.split('/')[1];
+        if (total && total !== '*') contentLength = total;
+        contentRange = null;
+      }
+
       // Content-Length & Content-Range: indirme yöneticileri (FDM vb.) için kritik
-      const contentLength = mediaRes.headers.get('content-length');
       if (contentLength) headers['Content-Length'] = contentLength;
-      const contentRange = mediaRes.headers.get('content-range');
       if (contentRange) headers['Content-Range'] = contentRange;
 
-      res.writeHead(mediaRes.status, headers);
+      res.writeHead(finalStatus, headers);
 
       if (req.method !== 'HEAD' && mediaRes.body) {
         Readable.fromWeb(mediaRes.body).pipe(res);
@@ -315,7 +333,7 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/youtube-remux') {
     const customFilename = (parsedUrl.searchParams.get('filename') || 'video.mp4').trim();
     const ext = (parsedUrl.searchParams.get('ext') || 'mp4').toLowerCase();
-    const cleanAscii = customFilename.replace(/[^\w\s\u00C0-\u017F.-]/gi, '_');
+    const cleanAscii = customFilename.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_');
     const contentType = ext === 'webm' ? 'video/webm' : 'video/mp4';
 
     // FDM / İndirme Yöneticileri dosya boyutu/tipi sorguladığında (HEAD) anında yanıt ver
