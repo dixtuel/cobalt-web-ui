@@ -40,5 +40,7 @@ logs/
 .dist/
 build/
 
-# Site sahiplik doğrulama dosyaları (Google Search Console vb.) — hesaba özel, repoya girmez
+# Site sahiplik doğrulama dosyaları (Google/Bing/Yandex Webmaster Tools vb.) — hesaba özel, repoya girmez
 html/google*.html
+html/BingSiteAuth.xml
+html/yandex_*.html
