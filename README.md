@@ -70,6 +70,15 @@ Arayüz şu adreste canlı olarak çalışmaktadır:
 | `COBALT_API` | `http://cobalt:9000` | Cobalt API konteynerinin iç adresi |
 | `PORT` | `80` | Web sunucusunun dinlemesi gereken port |
 | `NODE_ENV` | (değişken yok) | Node.js ortam (isteğe bağlı, `production` önerilir) |
+| `ADSENSE_CLIENT_ID` | (boş) | Google AdSense yayıncı kimliği (`ca-pub-...`). Boşsa hiç reklam yüklenmez. |
+| `ADSENSE_SLOT_CONTENT` | (boş) | İçerik altındaki duyarlı (responsive) reklam alanının slot ID'si |
+| `ADSENSE_SLOT_RAIL_LEFT` | (boş) | Masaüstünde sol kenar (160×600) reklam alanının slot ID'si |
+| `ADSENSE_SLOT_RAIL_RIGHT` | (boş) | Masaüstünde sağ kenar (160×600) reklam alanının slot ID'si |
+
+`ADSENSE_CLIENT_ID` tanımlı ama bir slot ID'si boşsa, o alan yalnızca placeholder
+göstermeye devam eder — hiçbir alan zorunlu değildir. `.env.example` dosyasını
+`.env` olarak kopyalayıp kendi değerlerinizi girin; `.env` `.gitignore` ile
+sürüm kontrolünün dışında tutulur.
 
 ## Yapı
 

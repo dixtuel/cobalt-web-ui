@@ -361,4 +361,58 @@ document.addEventListener('DOMContentLoaded', () => {
       submitBtn.disabled = false;
     }
   });
+
+  initAds();
 });
+
+// AdSense: sunucudaki ADSENSE_CLIENT_ID / ADSENSE_SLOT_* env'lerine göre reklam
+// alanlarını doldurur. Client ID veya ilgili slot ID yoksa o alan placeholder olarak kalır.
+async function initAds() {
+  let config;
+  try {
+    const res = await fetch('/ad-config.json');
+    config = await res.json();
+  } catch {
+    return;
+  }
+  if (!config || !config.clientId) return;
+
+  const script = document.createElement('script');
+  script.async = true;
+  script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${config.clientId}`;
+  script.crossOrigin = 'anonymous';
+  document.head.appendChild(script);
+
+  const slotDefs = [
+    { id: 'adSlotContent', slot: config.slots.content },
+    { id: 'adSlotRailLeft', slot: config.slots.railLeft },
+    { id: 'adSlotRailRight', slot: config.slots.railRight }
+  ];
+
+  for (const { id, slot } of slotDefs) {
+    if (!slot) continue;
+    const container = document.getElementById(id);
+    if (!container) continue;
+
+    container.innerHTML = '';
+    const ins = document.createElement('ins');
+    ins.className = 'adsbygoogle';
+    if (container.dataset.adWidth) {
+      ins.style.display = 'inline-block';
+      ins.style.width = `${container.dataset.adWidth}px`;
+      ins.style.height = `${container.dataset.adHeight}px`;
+    } else {
+      ins.style.display = 'block';
+      ins.style.width = '100%';
+      if (container.dataset.adFormat) ins.dataset.adFormat = container.dataset.adFormat;
+      if (container.dataset.adFullWidth) ins.dataset.fullWidthResponsive = container.dataset.adFullWidth;
+    }
+    ins.dataset.adClient = config.clientId;
+    ins.dataset.adSlot = slot;
+    container.appendChild(ins);
+
+    try {
+      (window.adsbygoogle = window.adsbygoogle || []).push({});
+    } catch {}
+  }
+}

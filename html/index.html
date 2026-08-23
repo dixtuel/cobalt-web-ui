@@ -149,23 +149,13 @@
         </div>
       </section>
 
-      <!-- Google AdSense display slot. Replace data-ad-client / data-ad-slot with your own
-           values once your AdSense account is approved, then uncomment the <ins> block and
-           call (adsbygoogle = window.adsbygoogle || []).push({}); -->
-      <div class="ad-slot">
+      <!-- AdSense: /ad-config.json'da ADSENSE_CLIENT_ID + ADSENSE_SLOT_CONTENT tanımlıysa
+           app.js bu alanı otomatik doldurur; tanımlı değilse placeholder öylece kalır. -->
+      <div class="ad-slot" id="adSlotContent" data-ad-format="auto" data-ad-full-width="true">
         <span class="ad-label">Reklam</span>
         <div class="ad-placeholder">
           Reklam alanı — AdSense yayıncı kimliği eklendiğinde burada gösterilir
         </div>
-        <!--
-        <ins class="adsbygoogle"
-             style="display:block; width:100%;"
-             data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
-             data-ad-slot="XXXXXXXXXX"
-             data-ad-format="auto"
-             data-full-width-responsive="true"></ins>
-        <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
-        -->
       </div>
     </main>
 
@@ -182,32 +172,17 @@
   <div id="toast" class="toast"></div>
 
   <!-- Masaüstü kenar reklamları (skyscraper). Yalnız geniş ekranda gösterilir, içerik
-       sütunuyla çakışmaz. AdSense yayıncı kimliği eklendiğinde <ins> bloklarının yorumu
-       kaldırılır. -->
+       sütunuyla çakışmaz. Doldurma app.js + /ad-config.json üzerinden env'e göre olur. -->
   <div class="ad-rail ad-rail-left" aria-hidden="true">
-    <div class="ad-slot ad-slot-rail">
+    <div class="ad-slot ad-slot-rail" id="adSlotRailLeft" data-ad-width="160" data-ad-height="600">
       <span class="ad-label">Reklam</span>
       <div class="ad-placeholder">160×600</div>
-      <!--
-      <ins class="adsbygoogle"
-           style="display:inline-block; width:160px; height:600px;"
-           data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
-           data-ad-slot="XXXXXXXXXX"></ins>
-      <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
-      -->
     </div>
   </div>
   <div class="ad-rail ad-rail-right" aria-hidden="true">
-    <div class="ad-slot ad-slot-rail">
+    <div class="ad-slot ad-slot-rail" id="adSlotRailRight" data-ad-width="160" data-ad-height="600">
       <span class="ad-label">Reklam</span>
       <div class="ad-placeholder">160×600</div>
-      <!--
-      <ins class="adsbygoogle"
-           style="display:inline-block; width:160px; height:600px;"
-           data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
-           data-ad-slot="XXXXXXXXXX"></ins>
-      <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
-      -->
     </div>
   </div>
 

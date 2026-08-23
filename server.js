@@ -9,6 +9,13 @@ const PUBLIC_DIR = path.join(__dirname, 'html');
 const COBALT_API = process.env.COBALT_API || 'http://cobalt:9000';
 const PORT = process.env.PORT || 80;
 
+const ADSENSE_CLIENT_ID = (process.env.ADSENSE_CLIENT_ID || '').trim();
+const ADSENSE_SLOTS = {
+  content: (process.env.ADSENSE_SLOT_CONTENT || '').trim(),
+  railLeft: (process.env.ADSENSE_SLOT_RAIL_LEFT || '').trim(),
+  railRight: (process.env.ADSENSE_SLOT_RAIL_RIGHT || '').trim()
+};
+
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -23,6 +30,20 @@ const MIME_TYPES = {
 const server = http.createServer(async (req, res) => {
   const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
   const pathname = parsedUrl.pathname;
+
+  // 0. AdSense config — istemci ADSENSE_CLIENT_ID / ADSENSE_SLOT_* env'lerine göre
+  // reklamları dinamik doldurur; boş bırakılan slot'lar placeholder olarak kalır.
+  if (pathname === '/ad-config.json') {
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+    return res.end(JSON.stringify({
+      clientId: ADSENSE_CLIENT_ID || null,
+      slots: {
+        content: ADSENSE_SLOTS.content || null,
+        railLeft: ADSENSE_SLOTS.railLeft || null,
+        railRight: ADSENSE_SLOTS.railRight || null
+      }
+    }));
+  }
 
   // 1. Health check / status
   if (pathname === '/api/' || pathname === '/api') {

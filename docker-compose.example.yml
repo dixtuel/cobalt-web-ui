@@ -29,6 +29,10 @@ services:
       - PORT=80
       # Docker Compose ağı içinde cobalt-api'ye iç adresle erişilir
       - COBALT_API=http://cobalt-api:9000
+    # AdSense ayarları .env dosyasından okunur (bkz. .env.example). Boş bırakılırsa
+    # reklamlar hiç yüklenmez, alanlar placeholder olarak kalır.
+    env_file:
+      - .env
     volumes:
       # Projenin tamamını read-only olarak container'a monte et
       - ./:/app:ro
