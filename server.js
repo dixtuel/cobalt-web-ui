@@ -102,6 +102,158 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // 2b. Evrensel URL Analiz ve Format Sorgulama (YouTube, TikTok, Instagram, Twitter, Reddit vb.)
+  if (pathname === '/api/analyze' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const url = (payload.url || '').trim();
+        const clientIp = req.headers['cf-connecting-ip'] || req.socket.remoteAddress || '';
+
+        if (!url) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ status: 'error', message: 'URL gerekli' }));
+        }
+
+        // YouTube Analizi
+        if (/^https?:\/\/([\w-]+\.)?(youtube\.com|youtu\.be|music\.youtube\.com)\//i.test(url)) {
+          const ytRes = await fetch(`${YTDLP_API}/analyze`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'X-Forwarded-For': clientIp
+            },
+            body: JSON.stringify({ url }),
+            signal: AbortSignal.timeout(35000)
+          });
+          const data = await ytRes.json();
+          res.writeHead(ytRes.status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+          return res.end(JSON.stringify(data));
+        }
+
+        // TikTok Analizi
+        if (/^https?:\/\/([\w-]+\.)?(tiktok\.com)\//i.test(url)) {
+          const formData = new URLSearchParams();
+          formData.append('url', url);
+          formData.append('hd', '1');
+
+          const tikRes = await egressFetch('https://www.tikwm.com/api/', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+            },
+            body: formData.toString()
+          });
+          const tData = await tikRes.json();
+          if (tData.code === 0 && tData.data) {
+            const d = tData.data;
+            const author = d.author?.unique_id || 'tiktok_user';
+            const title = d.title || `TikTok Video by @${author}`;
+            const isPhotoAlbum = d.images && Array.isArray(d.images) && d.images.length > 0;
+            const durationSec = d.duration || 0;
+            const mins = Math.floor(durationSec / 60);
+            const secs = durationSec % 60;
+            const durationStr = durationSec > 0 ? `${mins}:${secs < 10 ? '0' : ''}${secs}` : '';
+
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+            return res.end(JSON.stringify({
+              status: 'ok',
+              provider: 'tiktok',
+              title: title,
+              thumbnail: d.cover || d.origin_cover || '',
+              duration: durationSec,
+              duration_str: durationStr,
+              uploader: `@${author}`,
+              has_photos: isPhotoAlbum,
+              photos: isPhotoAlbum ? d.images.map((img, idx) => ({ url: img, filename: `tiktok_${author}_photo_${idx+1}.jpg` })) : [],
+              qualities: [
+                { id: 'hd', label: 'HD MP4 (Filigransız En Yüksek)', is_default: true, direct_url: d.hdplay || d.play },
+                { id: 'sd', label: 'SD MP4 (Filigransız)', is_default: false, direct_url: d.play }
+              ],
+              audio_bitrates: [
+                { id: '320', label: 'Orijinal Ses (MP3)', is_default: true, direct_url: d.music }
+              ]
+            }));
+          }
+        }
+
+        // Generic / Cobalt Analizi (Instagram, Twitter, Reddit, SoundCloud vb.)
+        const cobRes = await fetch(`${COBALT_API}/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({ url, downloadMode: 'auto', videoQuality: 'max' }),
+          signal: AbortSignal.timeout(30000)
+        });
+        const cData = await cobRes.json();
+
+        if (cData.status === 'picker' && Array.isArray(cData.picker)) {
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+          return res.end(JSON.stringify({
+            status: 'ok',
+            provider: 'picker',
+            title: 'Çoklu Medya / Galeri',
+            thumbnail: cData.picker[0]?.thumb || cData.picker[0]?.url || '',
+            has_photos: true,
+            photos: cData.picker.map((item, idx) => ({
+              url: item.url,
+              thumb: item.thumb || item.url,
+              filename: `media_${idx + 1}.${item.type === 'video' ? 'mp4' : 'jpg'}`,
+              type: item.type || 'photo'
+            })),
+            qualities: [],
+            audio_bitrates: []
+          }));
+        }
+
+        if (cData.status === 'redirect' || cData.status === 'tunnel') {
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+          return res.end(JSON.stringify({
+            status: 'ok',
+            provider: 'generic',
+            title: cData.filename || 'Medya Dosyası',
+            thumbnail: '',
+            direct_url: cData.url,
+            qualities: [
+              { id: 'max', label: 'Orijinal En Yüksek Kalite (MP4)', is_default: true, direct_url: cData.url }
+            ],
+            audio_bitrates: [
+              { id: '320', label: 'En İyi Ses (MP3)', is_default: true }
+            ]
+          }));
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        return res.end(JSON.stringify({
+          status: 'ok',
+          provider: 'generic',
+          title: 'Sosyal Medya İçeriği',
+          qualities: [
+            { id: 'max', label: 'En Yüksek Kalite (Max)', is_default: true },
+            { id: '1080', label: '1080p Full HD', is_default: false },
+            { id: '720', label: '720p HD', is_default: false },
+            { id: '480', label: '480p SD', is_default: false }
+          ],
+          audio_bitrates: [
+            { id: '320', label: '320 kbps (En Yüksek)', is_default: true },
+            { id: '128', label: '128 kbps (Standart)', is_default: false }
+          ]
+        }));
+
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ status: 'error', message: err.message }));
+      }
+    });
+    return;
+  }
+
   // 3. Media Stream Proxy (Direct attachment for iOS Safari & browsers)
   if (pathname === '/download' || pathname === '/media-stream') {
     const targetUrl = parsedUrl.searchParams.get('url');

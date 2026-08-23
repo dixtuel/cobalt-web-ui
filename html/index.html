@@ -3,43 +3,50 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Downloader — Sosyal Medya MP4 &amp; MP3 İndirici</title>
-  <meta name="description" content="YouTube, TikTok, Instagram, Twitter/X, Reddit ve SoundCloud'dan filigransız, hızlı ve ücretsiz video/ses indirme aracı. Reklamsız akış ve yüksek kalite seçenekleri.">
-  <meta name="robots" content="index, follow">
-  <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="icon" type="image/png" sizes="48x48" href="favicon-48.png">
-  <link rel="icon" type="image/png" sizes="96x96" href="favicon-96.png">
-  <link rel="icon" type="image/png" sizes="144x144" href="favicon-144.png">
-  <link rel="icon" type="image/png" sizes="192x192" href="favicon-192.png">
-  <link rel="apple-touch-icon" sizes="192x192" href="favicon-192.png">
-  <meta name="theme-color" content="#131722">
+  <title>Downloader — Ücretsiz YouTube, TikTok, Instagram MP4 &amp; MP3 İndirici</title>
+  <meta name="description" content="YouTube, TikTok, Instagram, Twitter/X, Reddit ve SoundCloud'dan filigransız, hızlı ve ücretsiz video/ses indirme aracı. Kayıt gerekmez, veri saklanmaz.">
+  <meta name="keywords" content="video downloader, mp3 downloader, mp4 downloader, youtube downloader, tiktok downloader, instagram downloader, sosyal medya indirici, medya indirici">
+  <link rel="canonical" href="https://downloader.dxtl.com.tr/">
 
-  <!-- OpenGraph & Twitter Cards (1200x1200 square preview) -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png">
+  <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png">
+  <link rel="icon" type="image/png" sizes="144x144" href="/favicon-144.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png">
+  <link rel="apple-touch-icon" href="/favicon-192.png">
+
   <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Downloader">
   <meta property="og:title" content="Downloader — Sosyal Medya MP4 &amp; MP3 İndirici">
   <meta property="og:description" content="YouTube, TikTok, Instagram, Twitter/X, Reddit ve SoundCloud'dan filigransız, hızlı ve ücretsiz video/ses indirme aracı.">
+  <meta property="og:url" content="https://downloader.dxtl.com.tr/">
   <meta property="og:locale" content="tr_TR">
-  <meta property="og:image" content="/og-image.png">
+  <meta property="og:image" content="https://downloader.dxtl.com.tr/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="1200">
   <meta property="og:image:alt" content="Downloader — Sosyal Medya İndirici">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Downloader — Sosyal Medya MP4 &amp; MP3 İndirici">
   <meta name="twitter:description" content="YouTube, TikTok, Instagram, Twitter/X, Reddit ve SoundCloud'dan filigransız, hızlı ve ücretsiz video/ses indirme aracı.">
-  <meta name="twitter:image" content="/og-image.png">
+  <meta name="twitter:image" content="https://downloader.dxtl.com.tr/og-image.png">
 
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "WebApplication",
+    "@id": "https://downloader.dxtl.com.tr/#software",
     "name": "Downloader",
+    "url": "https://downloader.dxtl.com.tr/",
     "description": "YouTube, TikTok, Instagram, Twitter/X, Reddit ve SoundCloud'dan filigransız, hızlı ve ücretsiz video/ses indirme aracı.",
     "applicationCategory": "MultimediaApplication",
     "operatingSystem": "Web",
     "inLanguage": "tr",
-    "isAccessibleForFree": true
+    "isAccessibleForFree": true,
+    "creator": {"@id": "https://dxtl.com.tr/#dixtuel"}
   }
   </script>
+  <!-- Canonical Person entity (name, sameAs profiles) is defined once on
+       https://dxtl.com.tr/ — referenced here by @id only. -->
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -63,169 +70,96 @@
         </svg>
         <div class="brand-text">
           <h1>Downloader</h1>
-          <p class="subtitle">YouTube, TikTok, Instagram, Twitter, Reddit &amp; SoundCloud</p>
+          <span class="tagline">sosyal medya mp4 / mp3 indirici</span>
         </div>
       </div>
-      <div class="header-badges">
-        <span class="pill pill-glow"><span class="pill-dot"></span> Hızlı &amp; Filigransız</span>
-        <span class="pill pill-ghost">Açık Kaynak</span>
+      <div class="header-status">
+        <span class="status-dot"></span>
+        <span class="status-label" id="backendStatus">Bağlı</span>
       </div>
     </header>
 
-    <div class="main-layout">
-      <!-- Sol AdSense Rayı (Desktop) -->
-      <aside class="ad-rail ad-rail-left" id="ad-rail-left" aria-label="Sponsorlu İçerik">
-        <div class="ad-slot ad-slot-sidebar" id="ad-slot-left">
-          <!-- server.js /ad-config.json ile dinamik AdSense enjeksiyonu -->
-        </div>
-      </aside>
-
-      <!-- Ana İçerik -->
-      <main class="downloader-card">
-        <form id="dl-form" autocomplete="off">
-          <div class="input-group">
+    <main class="main-content">
+      <section class="downloader-card">
+        <form id="downloadForm" class="download-form" onsubmit="return false;">
+          <div class="input-container">
             <div class="input-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
               </svg>
             </div>
             <input
               type="url"
-              id="url-input"
-              name="url"
-              placeholder="Bağlantıyı buraya yapıştırın (YouTube, TikTok, Instagram, Twitter...)"
+              id="urlInput"
+              placeholder="YouTube, TikTok, Instagram, Twitter veya Reddit bağlantısını yapıştırın..."
               required
-              autofocus
-            >
-            <button type="button" id="paste-btn" class="btn-icon" title="Panodan yapıştır" aria-label="Panodan yapıştır">
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button type="button" id="pasteBtn" class="btn-paste" title="Panodan Yapıştır">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
-                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
               </svg>
+              <span>Yapıştır</span>
             </button>
-            <button type="button" id="clear-btn" class="btn-icon hidden" title="Temizle" aria-label="Temizle">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"/>
-                <line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-            </button>
-          </div>
-
-          <div class="options-drawer" id="options-drawer">
-            <div class="options-summary" id="options-toggle">
-              <span class="summary-label">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="3"/>
-                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                </svg>
-                İndirme Seçenekleri
-              </span>
-              <span class="chevron">▾</span>
-            </div>
-
-            <div class="options-body" id="options-body">
-              <div class="option-row">
-                <label for="mode-select">Mod</label>
-                <select id="mode-select">
-                  <option value="auto" selected>Otomatik (En iyi kalite)</option>
-                  <option value="audio">Yalnız Ses (MP3/M4A)</option>
-                  <option value="mute">Sessiz Video</option>
-                </select>
-              </div>
-
-              <div class="option-row" id="quality-row">
-                <label for="quality-select">Video Kalitesi</label>
-                <select id="quality-select">
-                  <option value="max" selected>En Yüksek (Orijinal)</option>
-                  <option value="1080">1080p FHD</option>
-                  <option value="720">720p HD</option>
-                  <option value="480">480p</option>
-                  <option value="360">360p</option>
-                </select>
-              </div>
-
-              <div class="option-row" id="audio-format-row">
-                <label for="audio-format-select">Ses Formatı</label>
-                <select id="audio-format-select">
-                  <option value="best" selected>En İyi (Otomatik)</option>
-                  <option value="mp3">MP3</option>
-                  <option value="m4a">M4A</option>
-                  <option value="opus">Opus</option>
-                  <option value="wav">WAV</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div class="actions">
-            <button type="submit" id="submit-btn" class="btn-primary">
+            <button type="submit" id="submitBtn" class="btn-submit">
               <span class="btn-text">İndir</span>
-              <span class="btn-spinner"></span>
+              <div class="spinner" id="btnSpinner"></div>
             </button>
           </div>
         </form>
 
-        <div id="status-area" class="status-area hidden" role="status" aria-live="polite">
-          <div class="status-box">
-            <div class="spinner"></div>
-            <p class="status-msg">Medya hazırlanıyor...</p>
-          </div>
+        <!-- Dynamic Result & Analyzed Media Container -->
+        <div id="resultContainer" class="result-container" style="display: none;"></div>
+
+        <!-- Platform tags -->
+        <div class="supported-services">
+          <span class="service-pill">YouTube</span>
+          <span class="service-pill">TikTok Video / Foto</span>
+          <span class="service-pill">Instagram Post / Reels / Galeri</span>
+          <span class="service-pill">Twitter / X Medya</span>
+          <span class="service-pill">Reddit</span>
+          <span class="service-pill">Pinterest</span>
+          <span class="service-pill">SoundCloud</span>
         </div>
 
-        <div id="result-area" class="result-area hidden">
-          <div class="result-card">
-            <div class="result-header">
-              <span class="result-icon">✓</span>
-              <div>
-                <h3 class="result-title">İndirme Hazır</h3>
-                <p class="result-filename" id="result-filename"></p>
-              </div>
-            </div>
-            <div class="result-actions">
-              <a id="download-link" class="btn-download" href="#" target="_blank" rel="noopener">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="7 10 12 15 17 10"/>
-                  <line x1="12" y1="15" x2="12" y2="3"/>
-                </svg>
-                Dosyayı Kaydet
-              </a>
-            </div>
-          </div>
+        <!-- AdSense: /ad-config.json'da ADSENSE_CLIENT_ID + ADSENSE_SLOT_CONTENT tanımlıysa
+             app.js bu alanı otomatik doldurur; tanımlı değilse placeholder öylece kalır.
+             Yalnız dar ekranlarda görünür — geniş ekranda reklamlar kenar rayında (bkz. .ad-rail). -->
+        <div class="ad-slot ad-slot-inline" id="adSlotContent" data-ad-format="auto" data-ad-full-width="true">
+          <span class="ad-label">Reklam</span>
+          <div class="ad-placeholder">Reklam alanı</div>
         </div>
-
-        <!-- Kart İçi Reklam Alanı (Mobil ve Masaüstü fallback) -->
-        <div class="ad-slot ad-slot-in-card" id="ad-slot-card">
-          <!-- server.js /ad-config.json ile dinamik AdSense enjeksiyonu -->
-        </div>
-
-        <section class="supported-platforms" aria-label="Desteklenen platformlar">
-          <span class="platform-tag">YouTube</span>
-          <span class="platform-tag">TikTok</span>
-          <span class="platform-tag">Instagram</span>
-          <span class="platform-tag">Twitter / X</span>
-          <span class="platform-tag">Reddit</span>
-          <span class="platform-tag">SoundCloud</span>
-        </section>
-      </main>
-
-      <!-- Sağ AdSense Rayı (Desktop) -->
-      <aside class="ad-rail ad-rail-right" id="ad-rail-right" aria-label="Sponsorlu İçerik">
-        <div class="ad-slot ad-slot-sidebar" id="ad-slot-right">
-          <!-- server.js /ad-config.json ile dinamik AdSense enjeksiyonu -->
-        </div>
-      </aside>
-    </div>
+      </section>
+    </main>
 
     <footer class="app-footer">
-      <div class="footer-links">
-        <a href="privacy.html">Gizlilik Politikası</a>
-        <span class="sep">•</span>
-        <a href="terms.html">Kullanım Şartları</a>
-      </div>
-      <span class="credit">Açık kaynak medya indirme aracı</span>
+      <span class="credit">made by <a class="maker" href="https://dxtl.com.tr/" target="_blank" rel="noopener">dixtuel</a></span>
+      <nav class="footer-links">
+        <a href="/privacy.html">Gizlilik Politikası</a>
+        <span class="sep">·</span>
+        <a href="/terms.html">Kullanım Şartları</a>
+      </nav>
     </footer>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <!-- Masaüstü kenar reklamları (skyscraper). Yalnız geniş ekranda gösterilir, içerik
+       sütunuyla çakışmaz. Doldurma app.js + /ad-config.json üzerinden env'e göre olur. -->
+  <div class="ad-rail ad-rail-left" aria-hidden="true">
+    <div class="ad-slot ad-slot-rail" id="adSlotRailLeft" data-ad-width="160" data-ad-height="600">
+      <span class="ad-label">Reklam</span>
+      <div class="ad-placeholder">160×600</div>
+    </div>
+  </div>
+  <div class="ad-rail ad-rail-right" aria-hidden="true">
+    <div class="ad-slot ad-slot-rail" id="adSlotRailRight" data-ad-width="160" data-ad-height="600">
+      <span class="ad-label">Reklam</span>
+      <div class="ad-placeholder">160×600</div>
+    </div>
   </div>
 
   <script src="app.js"></script>

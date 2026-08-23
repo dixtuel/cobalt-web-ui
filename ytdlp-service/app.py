@@ -5,20 +5,13 @@ ve doğrudan indirilebilir CDN URL'sini döner. Gerçek video baytları burada
 diske hiç yazılmaz — video+ses ayrı akış olarak gelirse (modern YouTube'da
 çoğu zaman böyle) ffmpeg iki uzak URL'yi doğrudan HTTP yanıtına pipe'layarak
 gerçek zamanlı birleştirir (cobalt'ın /tunnel mantığıyla aynı prensip).
-
-Not (2026-08-23): Deno Deploy (ve AWS Lambda) ham CONNECT tünellemesini
-platform seviyesinde desteklemiyor — yt-dlp'nin --proxy'sine doğrudan
-verilemiyor. Bunun yerine `adapter.py` (mitmproxy, yalnız 127.0.0.1:8888'de,
-start.sh ile arka planda başlatılır) yerel bir CONNECT-destekli proxy gibi
-davranıp isteği relé'ye header-tabanlı iletir — yt-dlp'nin gördüğü sıradan
-bir proxy, relé'nin gördüğü sıradan bir istek/yanıt. Bkz. proje CLAUDE.md,
-"YouTube Desteği".
 """
 import os
 import re
 import subprocess
 import threading
 import time
+from urllib.parse import quote
 
 import yt_dlp
 from flask import Flask, Response, jsonify, request
@@ -32,22 +25,10 @@ REDDIT_CLIENT_ID = (os.environ.get("REDDIT_CLIENT_ID") or "").strip()
 REDDIT_CLIENT_SECRET = (os.environ.get("REDDIT_CLIENT_SECRET") or "").strip()
 DENO_RELAY_URL = (os.environ.get("DENO_RELAY_URL") or "").strip()
 
-FORMAT_MAP = {
-    "auto": "bestvideo*+bestaudio/best",
-    "mute": "bestvideo*/best",
-    "audio": "bestaudio/best",
-}
-
 # --- Güvenlik: SSRF ve kaynak-tüketimi koruması -----------------------------
-# /extract yalnızca gerçek YouTube URL'lerini kabul eder (rastgele bir URL'yi
-# yt-dlp'ye/ffmpeg'e vermek, servisimizi genel amaçlı bir SSRF/anonimleştirme
-# rölesine çevirir). /remux ise yalnızca yt-dlp'nin kendi döndürdüğü URL'lerin
-# gittiği bilinen Google/YouTube CDN host'larını kabul eder.
 YOUTUBE_URL_RE = re.compile(r"^https?://([\w-]+\.)?(youtube\.com|youtu\.be|music\.youtube\.com)/", re.I)
 GOOGLEVIDEO_URL_RE = re.compile(r"^https?://([\w-]+\.)?(googlevideo\.com|youtube\.com|ytimg\.com)/", re.I)
 
-# Basit sabit-pencere hız sınırlama (IP başına dakikada N istek). Redis yok —
-# bu servis tek process/tek worker ile çalışıyor, bellekte tutmak yeterli.
 _RATE_LIMIT_MAX = int(os.environ.get("RATE_LIMIT_MAX", "30"))
 _RATE_LIMIT_WINDOW_SEC = 60
 _rate_state: dict[str, tuple[int, float]] = {}
@@ -55,8 +36,6 @@ _rate_lock = threading.Lock()
 
 
 def _client_ip() -> str:
-    # server.js her zaman iç ağdan bağlanır; gerçek istemci IP'si varsa
-    # X-Forwarded-For üzerinden gelir (Cloudflare -> cobalt-web -> burası).
     fwd = request.headers.get("x-forwarded-for", "")
     return fwd.split(",")[0].strip() if fwd else (request.remote_addr or "unknown")
 
@@ -73,37 +52,72 @@ def rate_limited() -> bool:
         return count > _RATE_LIMIT_MAX
 
 
-# Egress rotasyonu (2 direkt : 4 relé) artık burada değil — adapter.py'de
-# (mitmproxy addon'u) yapılıyor. yt-dlp burada yalnız yerel adaptöre işaret
-# eder; adaptör her isteği kendi başına direkt mi Deno/Lambda relé'sine mi
-# göndereceğine karar verir. Adaptör en az bir relé için yapılandırıldıysa
-# (DENO_RELAY_URL veya LAMBDA_RELAY_URL) etkindir.
 ADAPTER_ACTIVE = bool(DENO_RELAY_URL or os.environ.get("LAMBDA_RELAY_URL"))
 LOCAL_ADAPTER_PROXY = "http://127.0.0.1:8888"
 
 
-def run_extract(url: str, fmt: str) -> dict:
+def build_format_selector(download_mode: str = "auto", quality: str = "max", codec: str = "h264", audio_format: str = "mp3") -> str:
+    quality = (quality or "max").lower().strip()
+    codec = (codec or "h264").lower().strip()
+    download_mode = (download_mode or "auto").lower().strip()
+
+    if download_mode == "audio":
+        return "bestaudio/best[acodec!=none]/best"
+
+    height_filter = f"[height<={quality}]" if quality in ("4320", "2160", "1440", "1080", "720", "480", "360", "240", "144") else ""
+
+    if download_mode == "mute":
+        if codec == "h264":
+            return f"bestvideo*[vcodec^=avc1]{height_filter}/bestvideo*{height_filter}/best*{height_filter}/best"
+        elif codec == "av1":
+            return f"bestvideo*[vcodec^=av01]{height_filter}/bestvideo*{height_filter}/best*{height_filter}/best"
+        elif codec == "vp9":
+            return f"bestvideo*[vcodec^=vp]{height_filter}/bestvideo*{height_filter}/best*{height_filter}/best"
+        return f"bestvideo*{height_filter}/best*{height_filter}/best"
+
+    # download_mode == "auto" (Video + Audio)
+    if codec == "h264":
+        return (
+            f"bestvideo*[vcodec^=avc1]{height_filter}+bestaudio/"
+            f"bestvideo*{height_filter}+bestaudio/"
+            f"bestvideo*+bestaudio/"
+            f"best*{height_filter}/best"
+        )
+    elif codec == "av1":
+        return (
+            f"bestvideo*[vcodec^=av01]{height_filter}+bestaudio/"
+            f"bestvideo*[vcodec^=av1]{height_filter}+bestaudio/"
+            f"bestvideo*{height_filter}+bestaudio/"
+            f"bestvideo*+bestaudio/"
+            f"best*{height_filter}/best"
+        )
+    elif codec == "vp9":
+        return (
+            f"bestvideo*[vcodec^=vp]{height_filter}+bestaudio/"
+            f"bestvideo*{height_filter}+bestaudio/"
+            f"bestvideo*+bestaudio/"
+            f"best*{height_filter}/best"
+        )
+    else:
+        return f"bestvideo*{height_filter}+bestaudio/bestvideo*+bestaudio/best*{height_filter}/best"
+
+
+def run_extract(url: str, fmt: str = None) -> dict:
     ydl_opts = {
-        "format": fmt,
         "quiet": True,
         "no_warnings": True,
         "skip_download": True,
         "noplaylist": True,
         "socket_timeout": 25,
         "remote_components": ["ejs:github"],
-        "extractor_args": {
-            "youtube": {"player_client": ["android", "ios", "web"]},
-        },
     }
+    if fmt:
+        ydl_opts["format"] = fmt
     if ADAPTER_ACTIVE:
         ydl_opts["proxy"] = LOCAL_ADAPTER_PROXY
-        # Adaptör (mitmproxy) TLS'i kendi CA'sıyla yerel olarak sonlandırır —
-        # bağlantı konteyner dışına hiç çıkmadığından cert doğrulaması burada
-        # anlamsız; sistem güven zincirini değiştirmek yerine bilinçli olarak
-        # atlanır (bkz. start.sh notu).
         ydl_opts["nocheckcertificate"] = True
 
-    # Cookie bağlama: Doğrudan metin (.env) veya dosya yolu; yoksa normal/varsayılan mod
+    # Cookie bağlama
     cookie_path = None
     if YTDLP_COOKIES_TEXT and len(YTDLP_COOKIES_TEXT.strip()) > 30:
         try:
@@ -125,10 +139,8 @@ def run_extract(url: str, fmt: str) -> dict:
     if cookie_path:
         ydl_opts["cookiefile"] = cookie_path
     else:
-        # Cookie yoksa bgutil pot-provider ile anonim PO-Token üretimi dene
         ydl_opts.setdefault("extractor_args", {})["youtubepot-bgutilhttp"] = {"base_url": [POT_PROVIDER_URL]}
 
-    # Reddit API: .env'de tanımlıysa eklenir; yoksa varsayılan anonim mod devam eder
     if REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET:
         ydl_opts.setdefault("extractor_args", {})["reddit"] = {
             "client_id": [REDDIT_CLIENT_ID],
@@ -144,6 +156,81 @@ def health():
     return jsonify({"status": "ok", "service": "ytdlp-service"})
 
 
+@app.route("/analyze", methods=["POST"])
+@app.route("/info", methods=["POST"])
+def analyze_video():
+    if rate_limited():
+        return jsonify({"status": "error", "error": {"code": "rate_limited", "message": "Çok fazla istek, biraz bekleyin."}}), 429
+
+    data = request.get_json(silent=True) or {}
+    url = (data.get("url") or "").strip()
+    if not url or not YOUTUBE_URL_RE.match(url):
+        return jsonify({"status": "error", "error": {"code": "invalid_url", "message": "Geçerli bir YouTube URL'si gerekli"}}), 400
+
+    try:
+        raw_info = run_extract(url, fmt=None)
+    except Exception as exc:
+        return jsonify({"status": "error", "error": {"code": "analyze_failed", "message": str(exc)}}), 502
+
+    title = (raw_info.get("title") or "YouTube Video").strip()
+    thumbnail = raw_info.get("thumbnail") or ""
+    duration_sec = raw_info.get("duration") or 0
+    uploader = raw_info.get("uploader") or raw_info.get("channel") or ""
+
+    mins = duration_sec // 60
+    secs = duration_sec % 60
+    duration_str = f"{mins}:{secs:02d}" if duration_sec > 0 else ""
+
+    all_heights = [f.get("height") for f in raw_info.get("formats", []) if f.get("height") and f.get("height") >= 144]
+    unique_heights = sorted(list(set(all_heights)), reverse=True)
+
+    LABEL_MAP = {
+        4320: "8K UHD (4320p)",
+        2160: "4K UHD (2160p)",
+        1440: "2K QHD (1440p)",
+        1080: "1080p Full HD",
+        720: "720p HD",
+        480: "480p SD",
+        360: "360p",
+        240: "240p",
+        144: "144p"
+    }
+
+    qualities = []
+    max_h = unique_heights[0] if unique_heights else 1080
+    qualities.append({
+        "id": "max",
+        "label": f"En Yüksek ({max_h}p)",
+        "height": max_h,
+        "is_default": True
+    })
+
+    for h in unique_heights:
+        lbl = LABEL_MAP.get(h, f"{h}p")
+        qualities.append({
+            "id": str(h),
+            "label": lbl,
+            "height": h,
+            "is_default": False
+        })
+
+    return jsonify({
+        "status": "ok",
+        "provider": "youtube",
+        "title": title,
+        "thumbnail": thumbnail,
+        "duration": duration_sec,
+        "duration_str": duration_str,
+        "uploader": uploader,
+        "qualities": qualities,
+        "audio_bitrates": [
+            {"id": "320", "label": "320 kbps (En Yüksek)", "is_default": True},
+            {"id": "256", "label": "256 kbps", "is_default": False},
+            {"id": "128", "label": "128 kbps (Standart)", "is_default": False}
+        ]
+    })
+
+
 @app.route("/extract", methods=["POST"])
 def extract():
     if rate_limited():
@@ -154,8 +241,13 @@ def extract():
     if not url or not YOUTUBE_URL_RE.match(url):
         return jsonify({"status": "error", "error": {"code": "invalid_url", "message": "Geçerli bir YouTube URL'si gerekli"}}), 400
 
-    download_mode = data.get("downloadMode", "auto")
-    fmt = FORMAT_MAP.get(download_mode, FORMAT_MAP["auto"])
+    download_mode = (data.get("downloadMode") or "auto").strip()
+    video_quality = (data.get("videoQuality") or data.get("vQuality") or "max").strip()
+    codec = (data.get("youtubeVideoCodec") or data.get("vCodec") or "h264").strip()
+    audio_format = (data.get("audioFormat") or data.get("aFormat") or "mp3").strip()
+    audio_bitrate = (data.get("audioBitrate") or "128").strip()
+
+    fmt = build_format_selector(download_mode, video_quality, codec, audio_format)
 
     try:
         info = run_extract(url, fmt)
@@ -165,19 +257,68 @@ def extract():
     title = (info.get("title") or "video").strip()
     requested = info.get("requested_formats")
 
+    if download_mode == "audio":
+        audio_url = None
+        if requested and len(requested) > 0:
+            audio_url = requested[-1].get("url")
+        if not audio_url:
+            audio_url = info.get("url")
+        if not audio_url and info.get("requested_downloads"):
+            audio_url = info["requested_downloads"][0].get("url")
+
+        if not audio_url:
+            return jsonify({"status": "error", "error": {"code": "no_stream", "message": "Ses linki bulunamadı"}}), 502
+
+        out_ext = "mp3" if audio_format not in ("m4a", "opus", "ogg", "wav") else audio_format
+        remux_path = (
+            f"/youtube-remux?audio={quote(audio_url, safe='')}&mode=audio"
+            f"&format={out_ext}&bitrate={audio_bitrate}&filename={quote(f'{title}.{out_ext}', safe='')}"
+        )
+        return jsonify({
+            "status": "redirect",
+            "url": remux_path,
+            "filename": f"{title}.{out_ext}",
+            "adapter": ADAPTER_ACTIVE,
+        })
+
+    if download_mode == "mute":
+        video_url = None
+        if requested and len(requested) > 0:
+            video_fmt = requested[0]
+            video_url = video_fmt.get("url")
+            v_ext = video_fmt.get("ext", "mp4")
+        else:
+            video_url = info.get("url")
+            v_ext = info.get("ext", "mp4")
+
+        if not video_url:
+            return jsonify({"status": "error", "error": {"code": "no_stream", "message": "Video linki bulunamadı"}}), 502
+
+        out_ext = "webm" if (codec == "vp9" or v_ext == "webm") else "mp4"
+        remux_path = (
+            f"/youtube-remux?video={quote(video_url, safe='')}&mode=mute"
+            f"&ext={out_ext}&filename={quote(f'{title}.{out_ext}', safe='')}"
+        )
+        return jsonify({
+            "status": "redirect",
+            "url": remux_path,
+            "filename": f"{title}.{out_ext}",
+            "adapter": ADAPTER_ACTIVE,
+        })
+
+    # download_mode == "auto" (Video + Audio)
     if requested and len(requested) >= 2:
-        # Video ve ses ayrı akış olarak geldi — /remux üzerinden gerçek
-        # zamanlı birleştirme gerekir (bkz. dosya başındaki not).
         video_fmt, audio_fmt = requested[0], requested[1]
         video_url = video_fmt.get("url")
         audio_url = audio_fmt.get("url")
         if not video_url or not audio_url:
             return jsonify({"status": "error", "error": {"code": "no_stream", "message": "İndirme linki bulunamadı"}}), 502
-        out_ext = "mp4" if (video_fmt.get("ext") == "mp4") else "webm"
-        from urllib.parse import quote
+
+        out_ext = "webm" if (codec == "vp9" and video_fmt.get("ext") == "webm") else "mp4"
         remux_path = (
-            f"/youtube-remux?video={quote(video_url, safe='')}"
-            f"&audio={quote(audio_url, safe='')}&ext={out_ext}&filename={quote(f'{title}.{out_ext}', safe='')}"
+            f"/youtube-remux?video={quote(video_url, safe='')}&audio={quote(audio_url, safe='')}"
+            f"&ext={out_ext}&vcodec={quote(video_fmt.get('vcodec') or '', safe='')}&acodec={quote(audio_fmt.get('acodec') or '', safe='')}"
+            f"&filename={quote(f'{title}.{out_ext}', safe='')}"
         )
         return jsonify({
             "status": "redirect",
@@ -206,37 +347,99 @@ def remux():
     if rate_limited():
         return "Çok fazla istek, biraz bekleyin.", 429
 
+    mode = (request.args.get("mode") or "video").strip()
     video_url = (request.args.get("video") or "").strip()
     audio_url = (request.args.get("audio") or "").strip()
-    ext = (request.args.get("ext") or "mp4").strip()
-    filename = (request.args.get("filename") or f"video.{ext}").strip()
-    if ext not in ("mp4", "webm"):
-        ext = "mp4"
+    ext = (request.args.get("ext") or "mp4").strip().lower()
+    fmt_param = (request.args.get("format") or ext).strip().lower()
+    bitrate = (request.args.get("bitrate") or "128").strip()
+    filename = (request.args.get("filename") or f"media.{ext}").strip()
 
-    if not GOOGLEVIDEO_URL_RE.match(video_url) or not GOOGLEVIDEO_URL_RE.match(audio_url):
-        return "Geçersiz kaynak URL", 400
+    UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
-    args = [
-        "ffmpeg", "-loglevel", "error",
-        "-reconnect", "1",
-        "-reconnect_at_eof", "1",
-        "-reconnect_streamed", "1",
-        "-reconnect_delay_max", "5",
-        "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "-i", video_url,
-        "-reconnect", "1",
-        "-reconnect_at_eof", "1",
-        "-reconnect_streamed", "1",
-        "-reconnect_delay_max", "5",
-        "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "-i", audio_url,
-        "-map", "0:v:0", "-map", "1:a:0",
-        "-c", "copy",
-        "-f", ext if ext == "webm" else "mp4",
-    ]
-    if ext == "mp4":
-        args += ["-movflags", "frag_keyframe+empty_moov+default_base_moof"]
-    args += ["pipe:1"]
+    if mode == "audio":
+        if not audio_url or not GOOGLEVIDEO_URL_RE.match(audio_url):
+            return "Geçersiz kaynak URL", 400
+
+        if fmt_param == "mp3":
+            args = [
+                "ffmpeg", "-loglevel", "error",
+                "-reconnect", "1", "-reconnect_at_eof", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
+                "-user_agent", UA,
+                "-i", audio_url,
+                "-vn", "-c:a", "libmp3lame", "-b:a", f"{bitrate}k",
+                "-f", "mp3", "pipe:1"
+            ]
+            mimetype = "audio/mpeg"
+        elif fmt_param in ("opus", "ogg"):
+            args = [
+                "ffmpeg", "-loglevel", "error",
+                "-reconnect", "1", "-reconnect_at_eof", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
+                "-user_agent", UA,
+                "-i", audio_url,
+                "-vn", "-c:a", "copy",
+                "-f", "opus" if fmt_param == "opus" else "ogg", "pipe:1"
+            ]
+            mimetype = "audio/opus" if fmt_param == "opus" else "audio/ogg"
+        elif fmt_param == "wav":
+            args = [
+                "ffmpeg", "-loglevel", "error",
+                "-reconnect", "1", "-reconnect_at_eof", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
+                "-user_agent", UA,
+                "-i", audio_url,
+                "-vn", "-c:a", "pcm_s16le",
+                "-f", "wav", "pipe:1"
+            ]
+            mimetype = "audio/wav"
+        else:  # m4a, aac, best
+            args = [
+                "ffmpeg", "-loglevel", "error",
+                "-reconnect", "1", "-reconnect_at_eof", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
+                "-user_agent", UA,
+                "-i", audio_url,
+                "-vn", "-c:a", "copy",
+                "-f", "mp4", "-movflags", "frag_keyframe+empty_moov+default_base_moof", "pipe:1"
+            ]
+            mimetype = "audio/mp4"
+
+    elif mode == "mute":
+        if not video_url or not GOOGLEVIDEO_URL_RE.match(video_url):
+            return "Geçersiz kaynak URL", 400
+        args = [
+            "ffmpeg", "-loglevel", "error",
+            "-reconnect", "1", "-reconnect_at_eof", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
+            "-user_agent", UA,
+            "-i", video_url,
+            "-an", "-c:v", "copy",
+            "-f", ext if ext in ("webm", "matroska") else "mp4",
+        ]
+        if ext == "mp4":
+            args += ["-movflags", "frag_keyframe+empty_moov+default_base_moof"]
+        args += ["pipe:1"]
+        mimetype = "video/webm" if ext == "webm" else "video/mp4"
+
+    else:  # Video + Audio
+        if not video_url or not audio_url or not GOOGLEVIDEO_URL_RE.match(video_url) or not GOOGLEVIDEO_URL_RE.match(audio_url):
+            return "Geçersiz kaynak URL", 400
+
+        acodec = (request.args.get("acodec") or "").lower()
+        args = [
+            "ffmpeg", "-loglevel", "error",
+            "-reconnect", "1", "-reconnect_at_eof", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
+            "-user_agent", UA,
+            "-i", video_url,
+            "-reconnect", "1", "-reconnect_at_eof", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
+            "-user_agent", UA,
+            "-i", audio_url,
+            "-map", "0:v:0", "-map", "1:a:0",
+            "-c:v", "copy",
+            "-c:a", "aac" if (ext == "mp4" and "opus" in acodec) else "copy",
+            "-f", ext if ext in ("webm", "matroska") else "mp4",
+        ]
+        if ext == "mp4":
+            args += ["-movflags", "frag_keyframe+empty_moov+default_base_moof"]
+        args += ["pipe:1"]
+        mimetype = "video/webm" if ext == "webm" else "video/mp4"
 
     proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=1024 * 64)
 
@@ -251,9 +454,7 @@ def remux():
             proc.stdout.close()
             proc.terminate()
 
-    mimetype = "video/webm" if ext == "webm" else "video/mp4"
-    clean_ascii = re.sub(r'[^\w\s\u00C0-\u017F.-]', '_', filename)
-    from urllib.parse import quote
+    clean_ascii = re.sub(r'[^\x20-\x7E]', '_', filename).replace('"', '_')
     headers = {
         "Content-Disposition": f'attachment; filename="{clean_ascii}"; filename*=UTF-8\'\'{quote(filename)}',
         "Content-Type": mimetype,
