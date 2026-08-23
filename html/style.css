@@ -72,7 +72,7 @@ a { color: inherit; }
 
 .app-wrapper {
   width: 100%;
-  max-width: 640px;
+  max-width: 720px;
   display: flex;
   flex-direction: column;
   gap: 22px;
@@ -320,6 +320,25 @@ a { color: inherit; }
 
 .option-item select:focus { border-color: var(--cobalt-bright); }
 
+.mute-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--fog);
+  cursor: pointer;
+  user-select: none;
+}
+
+.mute-toggle input {
+  accent-color: var(--cobalt-bright);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+.mute-toggle:has(input:checked) { color: var(--paper); }
+
 /* Result Container */
 .result-container {
   margin-top: 4px;
@@ -532,16 +551,17 @@ a { color: inherit; }
 .ad-slot-inline .ad-label { display: none; }
 .ad-slot-inline .ad-placeholder { padding: 4px; opacity: 0.6; }
 
-@media (min-width: 1300px) {
+@media (min-width: 1360px) {
   .ad-slot-inline { display: none; }
 }
 
 /* Masaüstü kenar reklamları (skyscraper) — yalnız içerik sütunuyla çakışmayacak kadar
-   geniş ekranlarda gösterilir. min-width eşiği, 640px'lik ana sütun + kenar boşlukları
-   dikkate alınarak hesaplandı. */
+   geniş ekranlarda gösterilir. min-width eşiği, 720px'lik ana sütun + kenar boşlukları
+   dikkate alınarak hesaplandı (~130px boşluk payı bırakır, 1366px'lik yaygın laptop
+   ekranlarında bile görünür). */
 .ad-rail { display: none; }
 
-@media (min-width: 1300px) {
+@media (min-width: 1360px) {
   .ad-rail {
     display: block;
     position: fixed;

@@ -16,8 +16,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const photoQualityWrapper = document.getElementById('photoQualityWrapper');
   const audioFormatWrapper = document.getElementById('audioFormatWrapper');
   const audioFormatSelect = document.getElementById('audioFormatSelect');
+  const audioBitrateWrapper = document.getElementById('audioBitrateWrapper');
+  const audioBitrateSelect = document.getElementById('audioBitrateSelect');
   const codecWrapper = document.getElementById('codecWrapper');
   const codecSelect = document.getElementById('codecSelect');
+  const muteToggleWrapper = document.getElementById('muteToggleWrapper');
+  const muteVideoCheckbox = document.getElementById('muteVideoCheckbox');
   const toast = document.getElementById('toast');
 
   let currentMode = 'auto'; // 'auto' (video), 'photo', or 'audio'
@@ -33,17 +37,23 @@ document.addEventListener('DOMContentLoaded', () => {
       qualityWrapper.style.display = 'flex';
       photoQualityWrapper.style.display = 'none';
       audioFormatWrapper.style.display = 'none';
+      audioBitrateWrapper.style.display = 'none';
       codecWrapper.style.display = 'flex';
+      muteToggleWrapper.style.display = 'flex';
     } else if (mode === 'photo') {
       qualityWrapper.style.display = 'none';
       photoQualityWrapper.style.display = 'flex';
       audioFormatWrapper.style.display = 'none';
+      audioBitrateWrapper.style.display = 'none';
       codecWrapper.style.display = 'none';
+      muteToggleWrapper.style.display = 'none';
     } else if (mode === 'audio') {
       qualityWrapper.style.display = 'none';
       photoQualityWrapper.style.display = 'none';
       audioFormatWrapper.style.display = 'flex';
+      audioBitrateWrapper.style.display = 'flex';
       codecWrapper.style.display = 'none';
+      muteToggleWrapper.style.display = 'none';
     }
   }
 
@@ -290,11 +300,15 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    let downloadMode = currentMode === 'photo' ? 'auto' : currentMode;
+    if (currentMode === 'auto' && muteVideoCheckbox.checked) downloadMode = 'mute';
+
     const payload = {
       url: rawUrl,
-      downloadMode: currentMode === 'photo' ? 'auto' : currentMode,
+      downloadMode,
       videoQuality: qualitySelect.value,
       audioFormat: audioFormatSelect.value,
+      audioBitrate: audioBitrateSelect.value,
       youtubeVideoCodec: codecSelect.value
     };
 

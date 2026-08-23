@@ -9,6 +9,8 @@
 
 - **Basit ve hızlı:** Node.js built-in modülleri, harici bağımlılık yok
 - **Responsive tasarım:** Mobil ve masaüstü cihazlarda sorunsuz çalışır
+- **Sessiz video indirme:** Ses kanalı olmadan (mute) video indirme seçeneği
+- **Ses bit hızı seçimi:** 320'den 8 kbps'e kadar (Cobalt API `audioBitrate`)
 - **Türkçe arayüz:** Tamamı Türkçe, KVKK uyumlu gizlilik politikası
 - **Proxy route'ları:** `/api`, `/tunnel`, `/tiktok-api`, `/media-stream` aracılığıyla Cobalt API'sine erişim
 - **AdSense hazır:** `.env` ile yapılandırılabilir reklam alanları (bkz. aşağıda)

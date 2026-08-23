@@ -141,6 +141,18 @@
               </select>
             </div>
 
+            <div class="option-item" id="audioBitrateWrapper" style="display: none;">
+              <label for="audioBitrateSelect">Ses Bit Hızı</label>
+              <select id="audioBitrateSelect">
+                <option value="320">320 kbps (En Yüksek)</option>
+                <option value="256">256 kbps</option>
+                <option value="128" selected>128 kbps (Önerilen)</option>
+                <option value="96">96 kbps</option>
+                <option value="64">64 kbps</option>
+                <option value="8">8 kbps (En Düşük)</option>
+              </select>
+            </div>
+
             <div class="option-item" id="codecWrapper">
               <label for="codecSelect">YouTube Kodek</label>
               <select id="codecSelect">
@@ -150,6 +162,11 @@
               </select>
             </div>
           </div>
+
+          <label class="mute-toggle" id="muteToggleWrapper">
+            <input type="checkbox" id="muteVideoCheckbox">
+            <span>Sessiz video indir (ses kanalı olmadan)</span>
+          </label>
         </div>
 
         <!-- Result Container -->
