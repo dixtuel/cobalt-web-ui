@@ -1,86 +1,62 @@
 // Downloader — Egress Relay (Deno Deploy)
 //
-// Gerçek bir HTTP CONNECT proxy: yt-dlp'nin --proxy bayrağı doğrudan buna
-// işaret edebilir (standart forward-proxy protokolü). Deno Deploy'un ham
-// TCP soket desteği (Deno.connect) sayesinde bu mümkün — AWS Lambda gibi
-// request/response-only platformlarda yapılamaz (bkz. proje CLAUDE.md'si).
+// ÖNEMLİ (2026-08-23'te canlıda doğrulandı): Deno Deploy'un edge/routing
+// katmanı ("deployd") çok-kiracılı bir router — istekleri yalnız uygulamanın
+// kendi kayıtlı domain'ine (Host header eşleşmesine) göre yönlendirir. Ham
+// CONNECT tünelleme (rastgele bir hedefe, örn. CONNECT www.google.com:443)
+// bu router seviyesinde INVALID_HOST_HEADER ile reddedilir — Deno.connect()
+// scriptin İÇİNDE çalışsa bile istek scripte hiç ulaşmaz. Bu yüzden yt-dlp
+// gibi bir istemcinin --proxy bayrağına doğrudan verilebilecek şeffaf bir
+// forward-proxy burada MÜMKÜN DEĞİL (bkz. proje CLAUDE.md, "YouTube Desteği"
+// bölümü — bu, yt-dlp trafiğinin doğrudan VDS IP'sinden gitmesinin nedeni).
 //
-// Kullanım: yt-dlp --proxy "http://<RELAY_SECRET>@<bu-projenin-deno-domaini>"
+// Bunun yerine mikoshi-ai'nin egress sisteminde de kullanılan, gerçekten
+// çalışan desen: normal bir istek/yanıt (Request/Response) reverse-proxy'si.
+// Hedef host bir header'da (x-target-host) taşınır, gövde/yol/method aynen
+// iletilir. Bu, KENDİ yazdığımız kodun (örn. Downloader'daki bir API çağrısı)
+// bu relé üzerinden gitmesini istediğimizde kullanılabilir — yt-dlp'nin iç
+// ağına şeffaf giremez, ama kendi fetch()/requests çağrılarımız için işe yarar.
 //
-// Paylaşılan sır, standart HTTP Basic/Proxy-Authorization ile kontrol edilir
-// (yt-dlp proxy URL'sindeki user:pass kısmını otomatik olarak
-// Proxy-Authorization header'ına çevirir).
+// Kullanım:
+//   fetch("https://downloader-egress-relay.dixtuel.deno.net/<path>", {
+//     headers: {
+//       "x-target-host": "https://example.com",
+//       "x-proxy-secret": "<RELAY_SECRET>",
+//     },
+//   })
 
 const RELAY_SECRET = Deno.env.get("RELAY_SECRET") ?? "";
 
-function unauthorized(): Response {
-  return new Response("Proxy Authentication Required", {
-    status: 407,
-    headers: { "Proxy-Authenticate": "Basic realm=\"relay\"" },
-  });
-}
+Deno.serve(async (req) => {
+  const targetHost = req.headers.get("x-target-host");
+  const secret = req.headers.get("x-proxy-secret");
 
-function checkAuth(req: Request): boolean {
-  if (!RELAY_SECRET) return true; // secret ayarlanmadıysa (yalnız test için) serbest bırak
-  const header = req.headers.get("proxy-authorization") || req.headers.get("authorization");
-  if (!header) return false;
-  const b64 = header.replace(/^Basic\s+/i, "");
-  try {
-    const decoded = atob(b64); // "<secret>:" formatında gelir (yt-dlp user:pass'i böyle kodlar)
-    const secret = decoded.split(":")[0];
-    return secret === RELAY_SECRET;
-  } catch {
-    return false;
+  if (RELAY_SECRET && secret !== RELAY_SECRET) {
+    return new Response("Unauthorized", { status: 401 });
   }
-}
+  if (!targetHost) {
+    return new Response(
+      JSON.stringify({ status: "ok", service: "downloader-egress-relay" }),
+      { headers: { "content-type": "application/json" } },
+    );
+  }
 
-async function handleConnect(req: Request, connInfo: Deno.ServeHandlerInfo): Promise<Response> {
-  // CONNECT host:port — HTTPS trafiği için ham TCP tünel.
-  const target = new URL(`http://${req.url.replace(/^.*?:\/\//, "") || req.headers.get("host")}`);
-  const [host, portStr] = (req.headers.get("host") || target.host).split(":");
-  const port = Number(portStr) || 443;
+  const incoming = new URL(req.url);
+  const targetUrl = targetHost.replace(/\/$/, "") + incoming.pathname + incoming.search;
 
-  let targetConn: Deno.TcpConn;
+  const forwardHeaders = new Headers(req.headers);
+  forwardHeaders.delete("x-target-host");
+  forwardHeaders.delete("x-proxy-secret");
+  forwardHeaders.delete("host");
+
   try {
-    targetConn = await Deno.connect({ hostname: host, port });
+    const upstream = await fetch(targetUrl, {
+      method: req.method,
+      headers: forwardHeaders,
+      body: ["GET", "HEAD"].includes(req.method) ? undefined : req.body,
+    });
+    return upstream;
   } catch (err) {
     return new Response(`Bad Gateway: ${err}`, { status: 502 });
   }
-
-  // Deno.serve üzerinden gelen isteği ham bir duplex soket olarak ele almak
-  // için Deno'nun HTTP upgrade mekanizması kullanılır.
-  const { socket, response } = Deno.upgradeHttpRaw(req, connInfo as unknown as Deno.Conn);
-  (async () => {
-    try {
-      await Promise.all([
-        socket.readable.pipeTo(targetConn.writable),
-        targetConn.readable.pipeTo(socket.writable),
-      ]);
-    } catch {
-      // bağlantı kapandı — normal
-    } finally {
-      try { targetConn.close(); } catch { /* already closed */ }
-    }
-  })();
-  return response;
-}
-
-async function handlePlainForward(req: Request): Promise<Response> {
-  // Düz HTTP istekleri (nadiren kullanılır, çoğu trafik HTTPS/CONNECT) için
-  // basit bir fetch passthrough.
-  const upstream = await fetch(req.url, {
-    method: req.method,
-    headers: req.headers,
-    body: req.body,
-  });
-  return upstream;
-}
-
-Deno.serve({ port: 8080 }, async (req, connInfo) => {
-  if (!checkAuth(req)) return unauthorized();
-
-  if (req.method === "CONNECT") {
-    return handleConnect(req, connInfo);
-  }
-  return handlePlainForward(req);
 });

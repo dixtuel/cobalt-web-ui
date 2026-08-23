@@ -5,33 +5,29 @@ ve doğrudan indirilebilir CDN URL'sini döner. Gerçek video baytları burada
 diske hiç yazılmaz — video+ses ayrı akış olarak gelirse (modern YouTube'da
 çoğu zaman böyle) ffmpeg iki uzak URL'yi doğrudan HTTP yanıtına pipe'layarak
 gerçek zamanlı birleştirir (cobalt'ın /tunnel mantığıyla aynı prensip).
-Yalnızca küçük JSON'luk çözümleme isteği, IP-tabanlı bloklamayı azaltmak için
-isteğe bağlı bir Deno relé üzerinden gönderilebilir.
+
+Not (2026-08-23): Deno Deploy (ve AWS Lambda) ham CONNECT tünellemesini
+platform seviyesinde desteklemiyor — yt-dlp'nin --proxy'sine doğrudan
+verilemiyor. Bunun yerine `adapter.py` (mitmproxy, yalnız 127.0.0.1:8888'de,
+start.sh ile arka planda başlatılır) yerel bir CONNECT-destekli proxy gibi
+davranıp isteği relé'ye header-tabanlı iletir — yt-dlp'nin gördüğü sıradan
+bir proxy, relé'nin gördüğü sıradan bir istek/yanıt. Bkz. proje CLAUDE.md,
+"YouTube Desteği".
 """
-import itertools
 import os
 import re
 import subprocess
 import threading
 import time
-from urllib.parse import urlparse
 
 import yt_dlp
 from flask import Flask, Response, jsonify, request
 
 app = Flask(__name__)
 
-DENO_RELAY_URL = (os.environ.get("DENO_RELAY_URL") or "").strip()
-DENO_RELAY_SECRET = (os.environ.get("DENO_RELAY_SECRET") or "").strip()
 POT_PROVIDER_URL = (os.environ.get("POT_PROVIDER_URL") or "http://pot-provider:4416").strip()
 COOKIES_FILE = (os.environ.get("YTDLP_COOKIES_FILE") or "").strip()
-
-# 2 direkt : 4 relé oranı. Tek process içinde bellekte tutulan basit bir
-# döngü yeterli — mikoshi'deki Redis tabanlı çoklu-worker senkronizasyonuna
-# burada ihtiyaç yok (bu servis tek worker ile çalışır).
-_ROUTE_PATTERN = ("direct", "relay", "direct", "relay", "relay", "relay")
-_route_counter = itertools.count()
-_route_lock = threading.Lock()
+DENO_RELAY_URL = (os.environ.get("DENO_RELAY_URL") or "").strip()
 
 FORMAT_MAP = {
     "auto": "bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo+bestaudio/best",
@@ -74,25 +70,16 @@ def rate_limited() -> bool:
         return count > _RATE_LIMIT_MAX
 
 
-def next_route() -> str:
-    if not DENO_RELAY_URL:
-        return "direct"
-    with _route_lock:
-        i = next(_route_counter) % len(_ROUTE_PATTERN)
-    return _ROUTE_PATTERN[i]
+# Egress rotasyonu (2 direkt : 4 relé) artık burada değil — adapter.py'de
+# (mitmproxy addon'u) yapılıyor. yt-dlp burada yalnız yerel adaptöre işaret
+# eder; adaptör her isteği kendi başına direkt mi Deno/Lambda relé'sine mi
+# göndereceğine karar verir. Adaptör en az bir relé için yapılandırıldıysa
+# (DENO_RELAY_URL veya LAMBDA_RELAY_URL) etkindir.
+ADAPTER_ACTIVE = bool(DENO_RELAY_URL or os.environ.get("LAMBDA_RELAY_URL"))
+LOCAL_ADAPTER_PROXY = "http://127.0.0.1:8888"
 
 
-def build_proxy_url() -> str | None:
-    """yt-dlp `--proxy` formatı: http://[secret@]host:port — Deno relé
-    isteği bir HTTP CONNECT proxy'si gibi işler (bkz. deno-relay/main.ts)."""
-    if not DENO_RELAY_URL:
-        return None
-    parsed = urlparse(DENO_RELAY_URL)
-    auth = f"{DENO_RELAY_SECRET}@" if DENO_RELAY_SECRET else ""
-    return f"{parsed.scheme}://{auth}{parsed.netloc}"
-
-
-def run_extract(url: str, fmt: str, proxy: str | None) -> dict:
+def run_extract(url: str, fmt: str) -> dict:
     ydl_opts = {
         "format": fmt,
         "quiet": True,
@@ -104,8 +91,13 @@ def run_extract(url: str, fmt: str, proxy: str | None) -> dict:
             "youtubepot-bgutilhttp": {"base_url": [POT_PROVIDER_URL]},
         },
     }
-    if proxy:
-        ydl_opts["proxy"] = proxy
+    if ADAPTER_ACTIVE:
+        ydl_opts["proxy"] = LOCAL_ADAPTER_PROXY
+        # Adaptör (mitmproxy) TLS'i kendi CA'sıyla yerel olarak sonlandırır —
+        # bağlantı konteyner dışına hiç çıkmadığından cert doğrulaması burada
+        # anlamsız; sistem güven zincirini değiştirmek yerine bilinçli olarak
+        # atlanır (bkz. start.sh notu).
+        ydl_opts["nocheckcertificate"] = True
     if COOKIES_FILE:
         ydl_opts["cookiefile"] = COOKIES_FILE
 
@@ -131,21 +123,10 @@ def extract():
     download_mode = data.get("downloadMode", "auto")
     fmt = FORMAT_MAP.get(download_mode, FORMAT_MAP["auto"])
 
-    route = next_route()
-    proxy = build_proxy_url() if route == "relay" else None
-
     try:
-        info = run_extract(url, fmt, proxy)
+        info = run_extract(url, fmt)
     except Exception as exc:
-        if proxy:
-            # Relé başarısız oldu — bu istek için doğrudan VDS IP'sine düş.
-            try:
-                info = run_extract(url, fmt, None)
-                route = "direct-fallback"
-            except Exception as exc2:
-                return jsonify({"status": "error", "error": {"code": "extract_failed", "message": str(exc2)}}), 502
-        else:
-            return jsonify({"status": "error", "error": {"code": "extract_failed", "message": str(exc)}}), 502
+        return jsonify({"status": "error", "error": {"code": "extract_failed", "message": str(exc)}}), 502
 
     title = (info.get("title") or "video").strip()
     requested = info.get("requested_formats")
@@ -168,7 +149,7 @@ def extract():
             "status": "redirect",
             "url": remux_path,
             "filename": f"{title}.{out_ext}",
-            "route": route,
+            "adapter": ADAPTER_ACTIVE,
         })
 
     direct_url = info.get("url")
@@ -182,7 +163,7 @@ def extract():
         "status": "redirect",
         "url": direct_url,
         "filename": f"{title}.{ext}",
-        "route": route,
+        "adapter": ADAPTER_ACTIVE,
     })
 
 

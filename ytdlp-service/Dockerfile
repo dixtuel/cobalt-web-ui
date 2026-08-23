@@ -9,9 +9,12 @@ RUN pip install --no-cache-dir \
     flask \
     gunicorn \
     yt-dlp \
-    bgutil-ytdlp-pot-provider
+    bgutil-ytdlp-pot-provider \
+    mitmproxy \
+    httpx
 
-COPY app.py .
+COPY app.py adapter.py start.sh .
+RUN chmod +x start.sh
 
 EXPOSE 5000
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--timeout", "120", "app:app"]
+CMD ["./start.sh"]

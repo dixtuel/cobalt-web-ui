@@ -92,7 +92,7 @@ Cobalt'ın kendi YouTube extractor'ı, YouTube'un PO-token (Proof-of-Origin) zor
 - `ytdlp-service/` — yt-dlp tabanlı Flask servisi. Video bilgisini çözümler, diske hiçbir şey yazmaz.
 - `pot-provider` — [bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider) sidecar'ı, PO-token üretir.
 - **Gerçek zamanlı remux:** Modern YouTube videolarının çoğunda video ve ses ayrı akış olarak gelir. Sunucu bunları indirip birleştirmek yerine `ffmpeg`'i iki uzak URL'yi `-c copy` ile doğrudan HTTP yanıtına **pipe** edecek şekilde çalıştırır — disk kullanılmaz, cobalt'ın `/tunnel` mantığıyla aynı prensip.
-- **Egress relé (isteğe bağlı):** `DENO_RELAY_URL`/`DENO_RELAY_SECRET` boş bırakılırsa tüm istekler doğrudan sunucunuzun IP'sinden gider. IP-tabanlı bloklamayı azaltmak isterseniz `ytdlp-service/deno-relay/main.ts`'i kendi [Deno Deploy](https://deno.com/deploy) hesabınıza deploy edip (`deployctl deploy`) bu env'leri doldurabilirsiniz — relé gerçek bir HTTP CONNECT proxy'si olarak çalışır (Deno Deploy'un ham TCP soket desteği sayesinde), yt-dlp'nin `--proxy` bayrağına doğrudan verilir.
+- **Egress relé (isteğe bağlı) + yerel adaptör:** `DENO_RELAY_URL`/`LAMBDA_RELAY_URL` boş bırakılırsa tüm istekler doğrudan sunucunuzun IP'sinden gider. Deno Deploy ve AWS Lambda ham CONNECT tünellemesini (yt-dlp'nin `--proxy`'sinin normalde ihtiyaç duyduğu şey) platform seviyesinde desteklemiyor — bu yüzden `adapter.py` (mitmproxy, yalnız konteyner içinde `127.0.0.1:8888`'de dinler) araya girer: yt-dlp'ye sıradan bir proxy gibi görünür, TLS'i yerel sonlandırıp isteği relé'lere **header-tabanlı** (`x-target-host`) sıradan bir istek/yanıt olarak iletir. Kendi relé'nizi deploy etmek için `ytdlp-service/deno-relay/main.ts`'i [Deno Deploy](https://deno.com/deploy)'a `deno deploy` CLI'ıyla (eski `deployctl` değil) deploy edip env'leri doldurun.
 - **Güvenlik:** `/extract` yalnız `youtube.com`/`youtu.be`, `/remux` yalnız `googlevideo.com` host'larını kabul eder (SSRF koruması); IP başına dakikada `RATE_LIMIT_MAX` (varsayılan 10) istekle sınırlıdır.
 - Kurulum için `.env.example`'ı `ytdlp-service/.env` olarak kopyalayın; hiçbir alan zorunlu değildir.
 
@@ -109,6 +109,8 @@ Cobalt'ın kendi YouTube extractor'ı, YouTube'un PO-token (Proof-of-Origin) zor
 │   └── privacy.html      # Gizlilik Politikası
 ├── ytdlp-service/
 │   ├── app.py             # YouTube extraction + remux servisi
+│   ├── adapter.py         # Yerel egress adaptörü (mitmproxy) — bkz. "YouTube Desteği"
+│   ├── start.sh           # Adaptör + Flask'ı birlikte başlatır
 │   ├── Dockerfile
 │   └── deno-relay/
 │       └── main.ts        # İsteğe bağlı egress relé (Deno Deploy)
