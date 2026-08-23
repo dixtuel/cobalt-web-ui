@@ -13,6 +13,7 @@
 - **Ses bit hızı seçimi:** 320'den 8 kbps'e kadar (Cobalt API `audioBitrate`)
 - **Türkçe arayüz:** Tamamı Türkçe, KVKK uyumlu gizlilik politikası
 - **Proxy route'ları:** `/api`, `/tunnel`, `/tiktok-api`, `/media-stream` aracılığıyla Cobalt API'sine erişim
+- **YouTube desteği:** Cobalt'ın YouTube extractor'ı yerine ayrı bir yt-dlp servisi (bkz. "YouTube Desteği" bölümü)
 - **AdSense hazır:** `.env` ile yapılandırılabilir reklam alanları (bkz. aşağıda)
 - **SEO hazır:** `robots.txt`, `sitemap.xml`, Open Graph / Twitter Card meta etiketleri
 - **Docker desteği:** Self-host için `docker-compose.yml` örneği dahil
@@ -84,6 +85,17 @@ göstermeye devam eder — hiçbir alan zorunlu değildir. `.env.example` dosyas
 `.env` olarak kopyalayıp kendi değerlerinizi girin; `.env` `.gitignore` ile
 sürüm kontrolünün dışında tutulur.
 
+## YouTube Desteği
+
+Cobalt'ın kendi YouTube extractor'ı, YouTube'un PO-token (Proof-of-Origin) zorunluluğunu ve sık değişen obfuscation'ını topluluk-çaplı [yt-dlp](https://github.com/yt-dlp/yt-dlp) kadar hızlı takip edemiyor; datacenter/VPS IP'lerinden gelen istekler genelde `LOGINREQUIRED` ile bloke ediliyor. Bu yüzden **YouTube linkleri cobalt yerine `ytdlp-service`'e gider**, diğer tüm platformlar (TikTok/Instagram/Twitter/Reddit/SoundCloud) cobalt üzerinde kalır.
+
+- `ytdlp-service/` — yt-dlp tabanlı Flask servisi. Video bilgisini çözümler, diske hiçbir şey yazmaz.
+- `pot-provider` — [bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider) sidecar'ı, PO-token üretir.
+- **Gerçek zamanlı remux:** Modern YouTube videolarının çoğunda video ve ses ayrı akış olarak gelir. Sunucu bunları indirip birleştirmek yerine `ffmpeg`'i iki uzak URL'yi `-c copy` ile doğrudan HTTP yanıtına **pipe** edecek şekilde çalıştırır — disk kullanılmaz, cobalt'ın `/tunnel` mantığıyla aynı prensip.
+- **Egress relé (isteğe bağlı):** `DENO_RELAY_URL`/`DENO_RELAY_SECRET` boş bırakılırsa tüm istekler doğrudan sunucunuzun IP'sinden gider. IP-tabanlı bloklamayı azaltmak isterseniz `ytdlp-service/deno-relay/main.ts`'i kendi [Deno Deploy](https://deno.com/deploy) hesabınıza deploy edip (`deployctl deploy`) bu env'leri doldurabilirsiniz — relé gerçek bir HTTP CONNECT proxy'si olarak çalışır (Deno Deploy'un ham TCP soket desteği sayesinde), yt-dlp'nin `--proxy` bayrağına doğrudan verilir.
+- **Güvenlik:** `/extract` yalnız `youtube.com`/`youtu.be`, `/remux` yalnız `googlevideo.com` host'larını kabul eder (SSRF koruması); IP başına dakikada `RATE_LIMIT_MAX` (varsayılan 10) istekle sınırlıdır.
+- Kurulum için `.env.example`'ı `ytdlp-service/.env` olarak kopyalayın; hiçbir alan zorunlu değildir.
+
 ## Yapı
 
 ```
@@ -95,6 +107,11 @@ sürüm kontrolünün dışında tutulur.
 │   ├── style.css         # CSS stilleri
 │   ├── terms.html        # Kullanım Şartları
 │   └── privacy.html      # Gizlilik Politikası
+├── ytdlp-service/
+│   ├── app.py             # YouTube extraction + remux servisi
+│   ├── Dockerfile
+│   └── deno-relay/
+│       └── main.ts        # İsteğe bağlı egress relé (Deno Deploy)
 ├── docker-compose.example.yml  # Self-host örneği
 ├── README.md             # Bu dosya
 └── LICENSE               # MIT Lisansı

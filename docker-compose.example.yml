@@ -15,6 +15,27 @@ services:
     # ports:
     #   - "9000:9000"
 
+  # YouTube için ayrı bir extraction servisi — cobalt'ın kendi YouTube desteği
+  # PO-token eksikliği yüzünden güvenilir değil (bkz. README "YouTube Desteği").
+  # İsteğe bağlı değil — YouTube linkleri bu servis olmadan çalışmaz; diğer
+  # platformlar (TikTok/Instagram/vb.) yalnız cobalt-api ile çalışmaya devam eder.
+  pot-provider:
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
+    container_name: pot-provider
+    restart: unless-stopped
+
+  ytdlp-service:
+    build:
+      context: ./ytdlp-service
+    container_name: ytdlp-service
+    restart: unless-stopped
+    depends_on:
+      - pot-provider
+    environment:
+      - POT_PROVIDER_URL=http://pot-provider:4416
+    env_file:
+      - ./ytdlp-service/.env
+
   cobalt-web-ui:
     image: node:20-alpine
     container_name: cobalt-web-ui
@@ -22,13 +43,15 @@ services:
     working_dir: /app
     depends_on:
       - cobalt-api
+      - ytdlp-service
     ports:
       - "8081:80"
     environment:
       - NODE_ENV=production
       - PORT=80
-      # Docker Compose ağı içinde cobalt-api'ye iç adresle erişilir
+      # Docker Compose ağı içinde cobalt-api'ye/ytdlp-service'e iç adresle erişilir
       - COBALT_API=http://cobalt-api:9000
+      - YTDLP_API=http://ytdlp-service:5000
     # AdSense ayarları .env dosyasından okunur (bkz. .env.example). Boş bırakılırsa
     # reklamlar hiç yüklenmez, alanlar placeholder olarak kalır.
     env_file:

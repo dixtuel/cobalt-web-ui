@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'html');
 const COBALT_API = process.env.COBALT_API || 'http://cobalt:9000';
+const YTDLP_API = process.env.YTDLP_API || 'http://ytdlp-service:5000';
 const PORT = process.env.PORT || 80;
 
 const ADSENSE_CLIENT_ID = (process.env.ADSENSE_CLIENT_ID || '').trim();
@@ -171,6 +172,74 @@ const server = http.createServer(async (req, res) => {
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'text/plain' });
       return res.end(`Tunnel error: ${err.message}`);
+    }
+  }
+
+  // 5b. YouTube extraction proxy (yt-dlp servisi — cobalt'ın YouTube desteği
+  // yetersiz kaldığı için ayrı bir servise yönlendirilir, bkz. CLAUDE.md).
+  // Gerçek istemci IP'si ytdlp-service'in kendi hız sınırlaması için iletilir
+  // (Cloudflare -> cf-connecting-ip; onun da olmadığı yerel testte soket IP'si).
+  if (req.method === 'POST' && pathname === '/youtube-extract') {
+    const clientIp = req.headers['cf-connecting-ip'] || req.socket.remoteAddress || '';
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const ytRes = await fetch(`${YTDLP_API}/extract`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Forwarded-For': clientIp
+          },
+          body: body
+        });
+        const data = await ytRes.json();
+        res.writeHead(ytRes.status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        return res.end(JSON.stringify(data));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ status: 'error', error: { code: 'ytdlp.backend.error', message: err.message } }));
+      }
+    });
+    return;
+  }
+
+  // 5c. YouTube remux stream proxy — ffmpeg'in gerçek zamanlı birleştirdiği
+  // video+ses akışını istemciye stream eder (diskte hiçbir aşamada dosya yok).
+  if (req.method === 'GET' && pathname === '/youtube-remux') {
+    try {
+      const clientIp = req.headers['cf-connecting-ip'] || req.socket.remoteAddress || '';
+      const targetUrl = `${YTDLP_API}/remux${parsedUrl.search}`;
+      const remuxRes = await fetch(targetUrl, {
+        headers: { 'X-Forwarded-For': clientIp }
+      });
+
+      if (!remuxRes.ok) {
+        res.writeHead(remuxRes.status, { 'Content-Type': 'text/plain' });
+        return res.end(await remuxRes.text());
+      }
+
+      const forwardHeaders = {};
+      for (const [key, val] of remuxRes.headers.entries()) {
+        if (key.toLowerCase() !== 'transfer-encoding') {
+          forwardHeaders[key] = val;
+        }
+      }
+      forwardHeaders['Access-Control-Allow-Origin'] = '*';
+
+      res.writeHead(200, forwardHeaders);
+      if (remuxRes.body) {
+        Readable.fromWeb(remuxRes.body).pipe(res);
+      } else {
+        res.end();
+      }
+      return;
+    } catch (err) {
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
+      }
+      return res.end(`Remux error: ${err.message}`);
     }
   }
 

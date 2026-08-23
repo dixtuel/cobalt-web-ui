@@ -153,6 +153,12 @@ document.addEventListener('DOMContentLoaded', () => {
     return /(?:tiktok\.com|vt\.tiktok\.com|vm\.tiktok\.com)/i.test(url);
   }
 
+  // YouTube linkleri cobalt yerine kendi yt-dlp servisimize gider — bkz.
+  // /srv/mikoshi-vds/containers/cobalt-web/CLAUDE.md ("YouTube Desteği").
+  function isYouTubeUrl(url) {
+    return /(?:youtube\.com|youtu\.be|music\.youtube\.com)/i.test(url);
+  }
+
   // Direct TikTok API Handler (Bypasses Datacenter WAF)
   async function downloadTikTokDirect(rawUrl) {
     const formData = new URLSearchParams();
@@ -312,8 +318,10 @@ document.addEventListener('DOMContentLoaded', () => {
       youtubeVideoCodec: codecSelect.value
     };
 
+    const endpoint = isYouTubeUrl(rawUrl) ? '/youtube-extract' : '/';
+
     try {
-      const res = await fetch('/', {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
