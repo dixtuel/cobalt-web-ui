@@ -45,6 +45,10 @@ html/google*.html
 html/BingSiteAuth.xml
 html/yandex_*.html
 
+# SEO dosyaları — sunucuda/deploy çıktısında tutulur, repoya girmez
+html/sitemap.xml
+html/robots.txt
+
 # AI asistan kılavuzları — yalnız yerel geliştirme notu, public repoya girmez
 AGENTS.md
 CLAUDE.md
