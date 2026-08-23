@@ -3,19 +3,22 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Live Demo](https://img.shields.io/badge/Live-downloader.dxtl.com.tr-green.svg?style=flat-square)](https://downloader.dxtl.com.tr)
 
-[imputnet/cobalt](https://github.com/imputnet/cobalt) API'si için bağımsız, özgün bir web arayüzü — "**Downloader**" markasıyla yayınlanır. Node.js tabanlı, hafif, harici bağımlılığı yok, production-ready.
+[imputnet/cobalt](https://github.com/imputnet/cobalt) API'si için bağımsız, özgün ve tam teşekküllü bir web arayüzü — "**Downloader**" markasıyla yayınlanır. Node.js tabanlı, hafif, harici bağımlılığı yok, production-ready.
 
 ## Özellikler
 
 - **Basit ve hızlı:** Node.js built-in modülleri, harici bağımlılık yok
-- **Responsive tasarım:** Mobil ve masaüstü cihazlarda sorunsuz çalışır
+- **Responsive & Modern tasarım:** Mobil ve masaüstü cihazlarda mükemmel uyum
+- **Çoklu Platform Desteği:** YouTube, TikTok, Instagram, Twitter/X, Reddit, SoundCloud
 - **Sessiz video indirme:** Ses kanalı olmadan (mute) video indirme seçeneği
-- **Ses bit hızı seçimi:** 320'den 8 kbps'e kadar (Cobalt API `audioBitrate`)
-- **Türkçe arayüz:** Tamamı Türkçe, KVKK uyumlu gizlilik politikası
-- **Proxy route'ları:** `/api`, `/tunnel`, `/tiktok-api`, `/media-stream` aracılığıyla Cobalt API'sine erişim
-- **YouTube desteği:** Cobalt'ın YouTube extractor'ı yerine ayrı bir yt-dlp servisi (bkz. "YouTube Desteği" bölümü)
-- **AdSense hazır:** `.env` ile yapılandırılabilir reklam alanları (bkz. aşağıda)
-- **SEO hazır:** `robots.txt`, `sitemap.xml`, Open Graph / Twitter Card meta etiketleri
+- **Ses formatı & bit hızı seçimi:** MP3, M4A, Opus, WAV ve otomatik en iyi kalite
+- **İndirme Yöneticisi Desteği (FDM, IDM):** `Range`, `If-Range` ve hızlı `HEAD` yanıtları ile kesintisiz indirme, duraklatma ve devam ettirme desteği (%99 kilitlenmeleri önlenmiştir)
+- **Gelişmiş YouTube Çözümleme:** Deno JS motoru entegreli EJS meydan okuma çözücüsü (`n-sig`), opsiyonel `cookies.txt` ve PO-Token fallback'i
+- **Çift Egress Röle Mimarisi:** Deno Deploy ve AWS Lambda üzerinden IP rotasyonu ve otomatik fallback (`deno` ↔ `lambda` → `direct`)
+- **Türkçe arayüz:** Tamamı Türkçe, KVKK uyumlu gizlilik politikası ve şartlar
+- **Proxy route'ları:** `/api`, `/tunnel`, `/tiktok-api`, `/media-stream`, `/youtube-extract`, `/youtube-remux`
+- **AdSense hazır:** `.env` ile yapılandırılabilir reklam alanları
+- **SEO & Sosyal Medya Hazır:** `robots.txt`, `sitemap.xml`, 1200×1200 Open Graph / Twitter Card meta etiketleri
 - **Docker desteği:** Self-host için `docker-compose.yml` örneği dahil
 - **MIT Lisansı:** Özgürce kullan, değiştir, dağıt
 
@@ -38,10 +41,11 @@ Arayüz "Downloader" adıyla şu adreste canlı olarak çalışmaktadır:
    cp docker-compose.example.yml docker-compose.yml
    ```
 
-2. Dosyayı ihtiyacına göre düzenle:
-   - `COBALT_API`: Kendi cobalt API konteynerinizin adresi
-   - `API_URL`: Cobalt API'sinin public adresi (indirme linkleri için gerekli)
-   - Port numarası (varsayılan: `8081`)
+2. İsteğe bağlı ortam dosyalarını hazırla:
+   ```bash
+   cp .env.example .env
+   cp ytdlp-service/.env.example ytdlp-service/.env
+   ```
 
 3. Servisleri başlat:
    ```bash
@@ -50,83 +54,73 @@ Arayüz "Downloader" adıyla şu adreste canlı olarak çalışmaktadır:
 
 4. Arayüze `http://localhost:8081` adresinden erişin.
 
-### Doğrudan Node.js ile Çalıştırma
-
-1. Bağımlılıkları yükle (zaten yok ama gerekirse):
-   ```bash
-   npm install
-   ```
-
-2. Ortam değişkenlerini ayarla:
-   ```bash
-   export COBALT_API=http://localhost:9000
-   export PORT=80
-   ```
-
-3. Sunucuyu başlat:
-   ```bash
-   node server.js
-   ```
-
 ## Ortam Değişkenleri
+
+### Web UI (`.env`)
 
 | Değişken | Varsayılan | Açıklama |
 | --- | --- | --- |
-| `COBALT_API` | `http://cobalt:9000` | Cobalt API konteynerinin iç adresi |
+| `COBALT_API` | `http://cobalt-api:9000` | Cobalt API konteynerinin iç adresi |
+| `YTDLP_API` | `http://ytdlp-service:5000` | YouTube extractor servisinin iç adresi |
 | `PORT` | `80` | Web sunucusunun dinlemesi gereken port |
-| `NODE_ENV` | (değişken yok) | Node.js ortam (isteğe bağlı, `production` önerilir) |
-| `ADSENSE_CLIENT_ID` | (boş) | Google AdSense yayıncı kimliği (`ca-pub-...`). Boşsa hiç reklam yüklenmez. |
-| `ADSENSE_SLOT_CONTENT` | (boş) | İçerik altındaki duyarlı (responsive) reklam alanının slot ID'si |
-| `ADSENSE_SLOT_RAIL_LEFT` | (boş) | Masaüstünde sol kenar (160×600) reklam alanının slot ID'si |
-| `ADSENSE_SLOT_RAIL_RIGHT` | (boş) | Masaüstünde sağ kenar (160×600) reklam alanının slot ID'si |
+| `NODE_ENV` | `production` | Node.js çalışma ortamı |
+| `ADSENSE_CLIENT_ID` | (boş) | Google AdSense yayıncı kimliği (`ca-pub-...`). Boşsa reklamlar yüklenmez. |
+| `ADSENSE_SLOT_CONTENT` | (boş) | İçerik altındaki responsive reklam slot ID'si |
+| `ADSENSE_SLOT_RAIL_LEFT` | (boş) | Masaüstünde sol kenar (160×600) reklam slot ID'si |
+| `ADSENSE_SLOT_RAIL_RIGHT` | (boş) | Masaüstünde sağ kenar (160×600) reklam slot ID'si |
 
-`ADSENSE_CLIENT_ID` tanımlı ama bir slot ID'si boşsa, o alan yalnızca placeholder
-göstermeye devam eder — hiçbir alan zorunlu değildir. `.env.example` dosyasını
-`.env` olarak kopyalayıp kendi değerlerinizi girin; `.env` `.gitignore` ile
-sürüm kontrolünün dışında tutulur.
+### YouTube Servisi (`ytdlp-service/.env`)
 
-## YouTube Desteği
+| Değişken | Varsayılan | Açıklama |
+| --- | --- | --- |
+| `YTDLP_COOKIES_FILE` | `/app/cookies/cookies.txt` | YouTube hesap çerezleri dosya yolu (isteğe bağlı) |
+| `YTDLP_COOKIES_TEXT` | (boş) | Doğrudan çerez metni yapıştırma alanı (isteğe bağlı) |
+| `REDDIT_CLIENT_ID` | (boş) | Reddit API Client ID (isteğe bağlı) |
+| `REDDIT_CLIENT_SECRET` | (boş) | Reddit API Secret (isteğe bağlı) |
+| `DENO_RELAY_URL` | (boş) | Deno Deploy egress rölesi URL'si |
+| `DENO_RELAY_SECRET` | (boş) | Deno Deploy röle güvenlik anahtarı (`x-proxy-secret`) |
+| `LAMBDA_RELAY_URL` | (boş) | AWS Lambda egress rölesi Function URL'si |
+| `LAMBDA_RELAY_SECRET` | (boş) | AWS Lambda röle güvenlik anahtarı (`x-proxy-secret`) |
 
-Cobalt'ın kendi YouTube extractor'ı, YouTube'un PO-token (Proof-of-Origin) zorunluluğunu ve sık değişen obfuscation'ını topluluk-çaplı [yt-dlp](https://github.com/yt-dlp/yt-dlp) kadar hızlı takip edemiyor; datacenter/VPS IP'lerinden gelen istekler genelde `LOGINREQUIRED` ile bloke ediliyor. Bu yüzden **YouTube linkleri cobalt yerine `ytdlp-service`'e gider**, diğer tüm platformlar (TikTok/Instagram/Twitter/Reddit/SoundCloud) cobalt üzerinde kalır.
+## YouTube Desteği ve Egress Mimarisi
 
-- `ytdlp-service/` — yt-dlp tabanlı Flask servisi. Video bilgisini çözümler, diske hiçbir şey yazmaz.
-- `pot-provider` — [bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider) sidecar'ı, PO-token üretir.
-- **Gerçek zamanlı remux:** Modern YouTube videolarının çoğunda video ve ses ayrı akış olarak gelir. Sunucu bunları indirip birleştirmek yerine `ffmpeg`'i iki uzak URL'yi `-c copy` ile doğrudan HTTP yanıtına **pipe** edecek şekilde çalıştırır — disk kullanılmaz, cobalt'ın `/tunnel` mantığıyla aynı prensip.
-- **Egress relé (isteğe bağlı) + yerel adaptör:** `DENO_RELAY_URL`/`LAMBDA_RELAY_URL` boş bırakılırsa tüm istekler doğrudan sunucunuzun IP'sinden gider. Deno Deploy ve AWS Lambda ham CONNECT tünellemesini (yt-dlp'nin `--proxy`'sinin normalde ihtiyaç duyduğu şey) platform seviyesinde desteklemiyor — bu yüzden `adapter.py` (mitmproxy, yalnız konteyner içinde `127.0.0.1:8888`'de dinler) araya girer: yt-dlp'ye sıradan bir proxy gibi görünür, TLS'i yerel sonlandırıp isteği relé'lere **header-tabanlı** (`x-target-host`) sıradan bir istek/yanıt olarak iletir. Kendi relé'nizi deploy etmek için `ytdlp-service/deno-relay/main.ts`'i [Deno Deploy](https://deno.com/deploy)'a `deno deploy` CLI'ıyla (eski `deployctl` değil) deploy edip env'leri doldurun.
-- **Güvenlik:** `/extract` yalnız `youtube.com`/`youtu.be`, `/remux` yalnız `googlevideo.com` host'larını kabul eder (SSRF koruması); IP başına dakikada `RATE_LIMIT_MAX` (varsayılan 10) istekle sınırlıdır.
-- Kurulum için `.env.example`'ı `ytdlp-service/.env` olarak kopyalayın; hiçbir alan zorunlu değildir.
+Cobalt'ın yerleşik YouTube extractor'ı, YouTube'un PO-token (Proof-of-Origin) ve n-sig meydan okumalarını topluluk-çaplı [yt-dlp](https://github.com/yt-dlp/yt-dlp) kadar hızlı takip edemeyebilir. Bu projede:
 
-## Yapı
+1. **Özel Extractor:** `ytdlp-service/` (Python/Flask/yt-dlp + Deno JS motoru) video bilgilerini canlı çözer, diske yazmaz.
+2. **Gerçek Zamanlı Remux:** Ayrı gelen video ve ses akışları `ffmpeg` ile sunucuda diske kaydedilmeden doğrudan HTTP yanıtına **pipe** edilir.
+3. **Egress Röleleri (Deno & AWS Lambda):**
+   - Datacenter IP bloklarını aşmak için `deno-relay/main.ts` (Deno Deploy) ve `lambda-relay/index.mjs` (AWS Lambda) şablonları sunulmuştur.
+   - Yerel `adapter.py` (mitmproxy) yt-dlp ile röleler arasında köprü kurar; kota ve hata durumlarında `deno` ↔ `lambda` → `direct` zincirinde otomatik geçiş yapar.
+
+## Proje Yapısı
 
 ```
 .
-├── server.js              # Node.js HTTP sunucusu, route proxy'si
+├── server.js                   # Node.js HTTP sunucusu, route proxy'si ve MIME yönetimi
 ├── html/
-│   ├── index.html        # Ana arayüz
-│   ├── app.js            # Client-side lojik
-│   ├── style.css         # CSS stilleri
-│   ├── terms.html        # Kullanım Şartları
-│   └── privacy.html      # Gizlilik Politikası
+│   ├── index.html             # Ana arayüz (Clean UI, OpenGraph 1200x1200)
+│   ├── app.js                 # İstemci mantığı, format & kalite yönetimi
+│   ├── style.css              # Modern responsive CSS stilleri
+│   ├── terms.html             # Kullanım Şartları
+│   └── privacy.html           # Gizlilik Politikası
 ├── ytdlp-service/
-│   ├── app.py             # YouTube extraction + remux servisi
-│   ├── adapter.py         # Yerel egress adaptörü (mitmproxy) — bkz. "YouTube Desteği"
-│   ├── start.sh           # Adaptör + Flask'ı birlikte başlatır
-│   ├── Dockerfile
-│   └── deno-relay/
-│       └── main.ts        # İsteğe bağlı egress relé (Deno Deploy)
-├── docker-compose.example.yml  # Self-host örneği
-├── README.md             # Bu dosya
-└── LICENSE               # MIT Lisansı
+│   ├── app.py                 # YouTube extraction + remux servisi
+│   ├── adapter.py             # Yerel egress adaptörü (mitmproxy köprüsü)
+│   ├── start.sh               # Servis başlatıcı (Gunicorn concurrency)
+│   ├── Dockerfile             # Python 3.12 + ffmpeg + Deno runtime
+│   ├── deno-relay/
+│   │   └── main.ts            # Deno Deploy egress rölesi
+│   └── lambda-relay/
+│       └── index.mjs          # AWS Lambda egress rölesi
+├── docker-compose.example.yml   # Docker Compose şablonu
+├── README.md                  # Bu dosya
+└── LICENSE                    # MIT Lisansı
 ```
 
 ## Kredi ve İlişki
 
-Bu proje **resmi Cobalt projesi (`imputnet/cobalt`) ile hiç ilişkili değildir**. Tamamen bağımsız, özgün bir web arayüzüdür ve Cobalt API'sini (https://github.com/imputnet/cobalt) kullanır. Tasarım, kaynak kod ve tüm özellikler sıfırdan yazılmıştır.
+Bu proje **resmi Cobalt projesi (`imputnet/cobalt`) ile doğrudan ilişkili değildir**. Tamamen bağımsız, özgün bir web arayüzüdür ve Cobalt API'sini (https://github.com/imputnet/cobalt) kullanır.
 
 ## Lisans
 
-MIT Lisansı altında yayımlanmıştır. Detaylar için [LICENSE](LICENSE) dosyasını okuyun.
-
-## İletişim
-
-Hata bildir veya öneride bulun: [GitHub Issues](https://github.com/dixtuel/cobalt-web-ui/issues)
+MIT Lisansı altında yayımlanmıştır. Detaylar için [LICENSE](LICENSE) dosyasını inceleyin.

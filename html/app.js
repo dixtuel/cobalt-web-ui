@@ -114,8 +114,17 @@ document.addEventListener('DOMContentLoaded', () => {
   function buildDownloadUrl(rawUrl, filename) {
     if (!rawUrl) return '';
 
+    // If already a relative or absolute YouTube remux link
+    if (rawUrl.startsWith('/youtube-remux') || rawUrl.includes('/youtube-remux?')) {
+      if (filename && !rawUrl.includes('filename=')) {
+        const glue = rawUrl.includes('?') ? '&' : '?';
+        return `${rawUrl}${glue}filename=${encodeURIComponent(filename)}`;
+      }
+      return rawUrl;
+    }
+
     // If already a Cobalt tunnel link
-    if (rawUrl.includes('/tunnel?')) {
+    if (rawUrl.includes('/tunnel?') || rawUrl.startsWith('/tunnel')) {
       try {
         const parsed = new URL(rawUrl, window.location.origin);
         return `${window.location.origin}${parsed.pathname}${parsed.search}`;
@@ -124,8 +133,13 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    // If already a local download endpoint
+    if (rawUrl.startsWith('/download?') || rawUrl.startsWith('/media-stream?')) {
+      return rawUrl;
+    }
+
     // Direct CDN / External stream proxy
-    return `/download?url=${encodeURIComponent(rawUrl)}&filename=${encodeURIComponent(filename || 'download.mp4')}`;
+    return `/download?url=${encodeURIComponent(rawUrl)}&filename=${encodeURIComponent(filename || 'media_download.mp4')}`;
   }
 
   // Trigger download (forces native iOS Safari attachment prompt)
@@ -300,9 +314,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       } catch (err) {
         console.warn('Direct TikTok resolver error, falling back to Cobalt:', err);
-      } finally {
-        submitBtn.classList.remove('loading');
-        submitBtn.disabled = false;
       }
     }
 
@@ -327,22 +338,29 @@ document.addEventListener('DOMContentLoaded', () => {
           'Accept': 'application/json',
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(60000)
       });
 
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch (parseErr) {
+        throw new Error('Sunucu geçersiz yanıt döndürdü (HTTP ' + res.status + ')');
+      }
 
       if (!res.ok || data.status === 'error') {
-        if (isTikTokUrl(rawUrl)) {
-          await downloadTikTokDirect(rawUrl);
-          return;
-        }
-
         const errCode = data.error?.code || 'Bilinmeyen hata';
         const errService = data.error?.context?.service || '';
         let errorMsg = `İndirme başarısız (${errCode})`;
         
-        if (errCode === 'error.api.fetch.fail') {
+        if (data.error?.message && typeof data.error.message === 'string') {
+          if (data.error.message.includes('Sign in to confirm') || data.error.message.includes('bot')) {
+            errorMsg = 'YouTube bot doğrulaması gerekiyor. Lütfen cookies.txt ekleyin.';
+          } else {
+            errorMsg = data.error.message;
+          }
+        } else if (errCode === 'error.api.fetch.fail') {
           errorMsg = `${errService ? errService.toUpperCase() + ': ' : ''}İçerik çekilemedi veya bot korumasına takıldı.`;
         } else if (errCode === 'error.api.content.private') {
           errorMsg = 'Bu içerik gizli veya oturum gerektiriyor.';
@@ -357,7 +375,11 @@ document.addEventListener('DOMContentLoaded', () => {
       // Single file download
       if (data.status === 'tunnel' || data.status === 'redirect') {
         const downloadUrl = data.url;
-        const filename = data.filename || 'media_download';
+        let filename = (data.filename || '').trim();
+        if (!filename) {
+          const defaultExt = currentMode === 'audio' ? (audioFormatSelect.value || 'mp3') : (currentMode === 'photo' ? 'jpg' : 'mp4');
+          filename = `media_download.${defaultExt}`;
+        }
 
         renderSingleResult(downloadUrl, filename, 'İndirme Hazır');
         triggerDownload(downloadUrl, filename);
@@ -374,10 +396,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         renderPicker(pickerItems, `Fotoğraf / Galeri (${pickerItems.length} Öğe)`);
         showToast(`${pickerItems.length} adet medya bulundu!`, 'success');
+      } else {
+        showToast('Beklenmeyen sunucu yanıtı: ' + (data.status || 'Bilinmeyen durum'), 'error');
       }
 
     } catch (err) {
-      showToast('İndirme hatası: ' + err.message, 'error');
+      showToast('İndirme hatası: ' + (err.name === 'TimeoutError' ? 'İstek zaman aşımına uğradı' : err.message), 'error');
     } finally {
       submitBtn.classList.remove('loading');
       submitBtn.disabled = false;

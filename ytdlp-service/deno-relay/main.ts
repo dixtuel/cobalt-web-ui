@@ -45,9 +45,15 @@ Deno.serve(async (req) => {
   const targetUrl = targetHost.replace(/\/$/, "") + incoming.pathname + incoming.search;
 
   const forwardHeaders = new Headers(req.headers);
-  forwardHeaders.delete("x-target-host");
-  forwardHeaders.delete("x-proxy-secret");
-  forwardHeaders.delete("host");
+  const stripKeys = [
+    "x-target-host", "x-proxy-secret", "host", "content-length", "transfer-encoding",
+    "x-forwarded-for", "x-forwarded-proto", "x-forwarded-host", "x-real-ip",
+    "cf-connecting-ip", "cf-ray", "cf-ipcountry", "cf-visitor", "true-client-ip",
+    "forwarded", "via"
+  ];
+  for (const k of stripKeys) {
+    forwardHeaders.delete(k);
+  }
 
   try {
     const upstream = await fetch(targetUrl, {

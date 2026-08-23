@@ -1,5 +1,8 @@
 version: '3.8'
 
+volumes:
+  mitm-ca:
+
 services:
   cobalt-api:
     image: ghcr.io/imputnet/cobalt:latest
@@ -15,32 +18,40 @@ services:
     # ports:
     #   - "9000:9000"
 
-  # YouTube için ayrı bir extraction servisi — cobalt'ın kendi YouTube desteği
-  # PO-token eksikliği yüzünden güvenilir değil (bkz. README "YouTube Desteği").
-  # İsteğe bağlı değil — YouTube linkleri bu servis olmadan çalışmaz; diğer
-  # platformlar (TikTok/Instagram/vb.) yalnız cobalt-api ile çalışmaya devam eder.
+  # PO Token (Proof-of-Origin) sağlayıcı — yt-dlp'nin YouTube'a "gerçek tarayıcı"
+  # olduğunu kanıtlaması için token üretir.
   pot-provider:
     image: brainicism/bgutil-ytdlp-pot-provider:latest
     container_name: pot-provider
     restart: unless-stopped
+    mem_limit: 128m
+    memswap_limit: 256m
 
+  # YouTube çözümleme & gerçek zamanlı remux servisi (Python/yt-dlp)
   ytdlp-service:
     build:
       context: ./ytdlp-service
     container_name: ytdlp-service
     restart: unless-stopped
+    mem_limit: 512m
+    memswap_limit: 1g
     depends_on:
       - pot-provider
     environment:
       - POT_PROVIDER_URL=http://pot-provider:4416
     env_file:
       - ./ytdlp-service/.env
+    volumes:
+      - mitm-ca:/app/.mitmproxy
+      - ./ytdlp-service/cookies:/app/cookies:ro
 
   cobalt-web-ui:
     image: node:20-alpine
     container_name: cobalt-web-ui
     restart: unless-stopped
     working_dir: /app
+    mem_limit: 64m
+    memswap_limit: 128m
     depends_on:
       - cobalt-api
       - ytdlp-service
@@ -49,14 +60,13 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=80
-      # Docker Compose ağı içinde cobalt-api'ye/ytdlp-service'e iç adresle erişilir
+      # Docker Compose ağı içinde cobalt-api'ye ve ytdlp-service'e iç adresle erişilir
       - COBALT_API=http://cobalt-api:9000
       - YTDLP_API=http://ytdlp-service:5000
     # AdSense ayarları .env dosyasından okunur (bkz. .env.example). Boş bırakılırsa
-    # reklamlar hiç yüklenmez, alanlar placeholder olarak kalır.
+    # reklamlar yüklenmez, alanlar temiz ve gizli kalır.
     env_file:
       - .env
     volumes:
-      # Projenin tamamını read-only olarak container'a monte et
       - ./:/app:ro
     command: node server.js

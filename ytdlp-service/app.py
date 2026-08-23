@@ -27,12 +27,15 @@ app = Flask(__name__)
 
 POT_PROVIDER_URL = (os.environ.get("POT_PROVIDER_URL") or "http://pot-provider:4416").strip()
 COOKIES_FILE = (os.environ.get("YTDLP_COOKIES_FILE") or "").strip()
+YTDLP_COOKIES_TEXT = (os.environ.get("YTDLP_COOKIES_TEXT") or "").strip()
+REDDIT_CLIENT_ID = (os.environ.get("REDDIT_CLIENT_ID") or "").strip()
+REDDIT_CLIENT_SECRET = (os.environ.get("REDDIT_CLIENT_SECRET") or "").strip()
 DENO_RELAY_URL = (os.environ.get("DENO_RELAY_URL") or "").strip()
 
 FORMAT_MAP = {
-    "auto": "bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo+bestaudio/best",
-    "mute": "bestvideo[vcodec^=avc1]/bestvideo/best",  # tek akış, remux gerekmez
-    "audio": "bestaudio[ext=m4a]/bestaudio/best[acodec!=none]",  # tek akış, remux gerekmez
+    "auto": "bestvideo*+bestaudio/best",
+    "mute": "bestvideo*/best",
+    "audio": "bestaudio/best",
 }
 
 # --- Güvenlik: SSRF ve kaynak-tüketimi koruması -----------------------------
@@ -45,7 +48,7 @@ GOOGLEVIDEO_URL_RE = re.compile(r"^https?://([\w-]+\.)?(googlevideo\.com|youtube
 
 # Basit sabit-pencere hız sınırlama (IP başına dakikada N istek). Redis yok —
 # bu servis tek process/tek worker ile çalışıyor, bellekte tutmak yeterli.
-_RATE_LIMIT_MAX = int(os.environ.get("RATE_LIMIT_MAX", "10"))
+_RATE_LIMIT_MAX = int(os.environ.get("RATE_LIMIT_MAX", "30"))
 _RATE_LIMIT_WINDOW_SEC = 60
 _rate_state: dict[str, tuple[int, float]] = {}
 _rate_lock = threading.Lock()
@@ -86,9 +89,10 @@ def run_extract(url: str, fmt: str) -> dict:
         "no_warnings": True,
         "skip_download": True,
         "noplaylist": True,
-        "socket_timeout": 20,
+        "socket_timeout": 25,
+        "remote_components": ["ejs:github"],
         "extractor_args": {
-            "youtubepot-bgutilhttp": {"base_url": [POT_PROVIDER_URL]},
+            "youtube": {"player_client": ["android", "ios", "web"]},
         },
     }
     if ADAPTER_ACTIVE:
@@ -98,8 +102,38 @@ def run_extract(url: str, fmt: str) -> dict:
         # anlamsız; sistem güven zincirini değiştirmek yerine bilinçli olarak
         # atlanır (bkz. start.sh notu).
         ydl_opts["nocheckcertificate"] = True
-    if COOKIES_FILE:
-        ydl_opts["cookiefile"] = COOKIES_FILE
+
+    # Cookie bağlama: Doğrudan metin (.env) veya dosya yolu; yoksa normal/varsayılan mod
+    cookie_path = None
+    if YTDLP_COOKIES_TEXT and len(YTDLP_COOKIES_TEXT.strip()) > 30:
+        try:
+            cookie_tmp = "/tmp/cookies_env.txt"
+            with open(cookie_tmp, "w", encoding="utf-8") as f:
+                f.write(YTDLP_COOKIES_TEXT)
+            cookie_path = cookie_tmp
+        except Exception:
+            pass
+    elif COOKIES_FILE and os.path.isfile(COOKIES_FILE) and os.path.getsize(COOKIES_FILE) > 30:
+        try:
+            import shutil
+            cookie_tmp = "/tmp/cookies_mounted.txt"
+            shutil.copyfile(COOKIES_FILE, cookie_tmp)
+            cookie_path = cookie_tmp
+        except Exception:
+            pass
+
+    if cookie_path:
+        ydl_opts["cookiefile"] = cookie_path
+    else:
+        # Cookie yoksa bgutil pot-provider ile anonim PO-Token üretimi dene
+        ydl_opts.setdefault("extractor_args", {})["youtubepot-bgutilhttp"] = {"base_url": [POT_PROVIDER_URL]}
+
+    # Reddit API: .env'de tanımlıysa eklenir; yoksa varsayılan anonim mod devam eder
+    if REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET:
+        ydl_opts.setdefault("extractor_args", {})["reddit"] = {
+            "client_id": [REDDIT_CLIENT_ID],
+            "client_secret": [REDDIT_CLIENT_SECRET],
+        }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         return ydl.extract_info(url, download=False)
@@ -143,7 +177,7 @@ def extract():
         from urllib.parse import quote
         remux_path = (
             f"/youtube-remux?video={quote(video_url, safe='')}"
-            f"&audio={quote(audio_url, safe='')}&ext={out_ext}"
+            f"&audio={quote(audio_url, safe='')}&ext={out_ext}&filename={quote(f'{title}.{out_ext}', safe='')}"
         )
         return jsonify({
             "status": "redirect",
@@ -175,6 +209,7 @@ def remux():
     video_url = (request.args.get("video") or "").strip()
     audio_url = (request.args.get("audio") or "").strip()
     ext = (request.args.get("ext") or "mp4").strip()
+    filename = (request.args.get("filename") or f"video.{ext}").strip()
     if ext not in ("mp4", "webm"):
         ext = "mp4"
 
@@ -183,14 +218,24 @@ def remux():
 
     args = [
         "ffmpeg", "-loglevel", "error",
+        "-reconnect", "1",
+        "-reconnect_at_eof", "1",
+        "-reconnect_streamed", "1",
+        "-reconnect_delay_max", "5",
+        "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "-i", video_url,
+        "-reconnect", "1",
+        "-reconnect_at_eof", "1",
+        "-reconnect_streamed", "1",
+        "-reconnect_delay_max", "5",
+        "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "-i", audio_url,
         "-map", "0:v:0", "-map", "1:a:0",
         "-c", "copy",
         "-f", ext if ext == "webm" else "mp4",
     ]
     if ext == "mp4":
-        args += ["-movflags", "frag_keyframe+empty_moov+faststart"]
+        args += ["-movflags", "frag_keyframe+empty_moov+default_base_moof"]
     args += ["pipe:1"]
 
     proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=1024 * 64)
@@ -207,9 +252,14 @@ def remux():
             proc.terminate()
 
     mimetype = "video/webm" if ext == "webm" else "video/mp4"
+    clean_ascii = re.sub(r'[^\w\s\u00C0-\u017F.-]', '_', filename)
+    from urllib.parse import quote
     headers = {
-        "Content-Disposition": f'attachment; filename="video.{ext}"',
+        "Content-Disposition": f'attachment; filename="{clean_ascii}"; filename*=UTF-8\'\'{quote(filename)}',
+        "Content-Type": mimetype,
         "Cache-Control": "no-cache, no-store",
+        "Access-Control-Allow-Origin": "*",
+        "Accept-Ranges": "bytes",
     }
     return Response(generate(), mimetype=mimetype, headers=headers)
 
