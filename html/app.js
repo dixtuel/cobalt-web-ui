@@ -43,22 +43,68 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   checkBackend();
 
+  let lastAnalyzedUrl = '';
+  let inputDebounceTimer = null;
+
+  function isValidUrl(string) {
+    try {
+      const url = new URL(string.trim());
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }
+
   // Paste button
   pasteBtn.addEventListener('click', async () => {
     try {
       if (navigator.clipboard && navigator.clipboard.readText) {
         const text = await navigator.clipboard.readText();
-        if (text) {
+        if (text && isValidUrl(text)) {
           urlInput.value = text.trim();
-          showToast('Bağlantı panodan yapıştırıldı', 'success');
+          showToast('Bağlantı yapıştırıldı, analiz ediliyor...', 'success');
           triggerAnalyze();
+          return;
         }
-      } else {
-        urlInput.focus();
-        showToast('Lütfen bağlantıyı yapıştırın', '');
       }
+      urlInput.focus();
+      showToast('Lütfen panodaki bağlantıyı yapıştırın', '');
     } catch {
       urlInput.focus();
+    }
+  });
+
+  // Native input paste event (Ctrl+V / Sağ Tık Yapıştır)
+  urlInput.addEventListener('paste', (e) => {
+    const text = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+    if (text && isValidUrl(text)) {
+      urlInput.value = text.trim();
+      e.preventDefault();
+      showToast('Bağlantı algılandı, analiz ediliyor...', 'success');
+      triggerAnalyze();
+    }
+  });
+
+  // Dynamic input change with auto-debounce
+  urlInput.addEventListener('input', () => {
+    clearTimeout(inputDebounceTimer);
+    const val = urlInput.value.trim();
+    if (val && isValidUrl(val) && val !== lastAnalyzedUrl) {
+      inputDebounceTimer = setTimeout(() => {
+        triggerAnalyze();
+      }, 400);
+    }
+  });
+
+  // Global paste handler (sayfanın herhangi bir yerinde Ctrl+V yapıldığında)
+  document.addEventListener('paste', (e) => {
+    if (document.activeElement === urlInput) return; // Zaten urlInput üzerinde
+    const text = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+    if (text && isValidUrl(text)) {
+      urlInput.value = text.trim();
+      e.preventDefault();
+      showToast('Bağlantı panodan alındı, analiz ediliyor...', 'success');
+      triggerAnalyze();
     }
   });
 
@@ -136,6 +182,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    lastAnalyzedUrl = rawUrl;
     submitBtn.classList.add('loading');
     submitBtn.disabled = true;
     resultContainer.style.display = 'none';
