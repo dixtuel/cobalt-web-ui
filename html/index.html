@@ -165,16 +165,15 @@
           <span class="service-pill">Pinterest</span>
           <span class="service-pill">SoundCloud</span>
         </div>
-      </section>
 
-      <!-- AdSense: /ad-config.json'da ADSENSE_CLIENT_ID + ADSENSE_SLOT_CONTENT tanımlıysa
-           app.js bu alanı otomatik doldurur; tanımlı değilse placeholder öylece kalır. -->
-      <div class="ad-slot" id="adSlotContent" data-ad-format="auto" data-ad-full-width="true">
-        <span class="ad-label">Reklam</span>
-        <div class="ad-placeholder">
-          Reklam alanı — AdSense yayıncı kimliği eklendiğinde burada gösterilir
+        <!-- AdSense: /ad-config.json'da ADSENSE_CLIENT_ID + ADSENSE_SLOT_CONTENT tanımlıysa
+             app.js bu alanı otomatik doldurur; tanımlı değilse placeholder öylece kalır.
+             Yalnız dar ekranlarda görünür — geniş ekranda reklamlar kenar rayında (bkz. .ad-rail). -->
+        <div class="ad-slot ad-slot-inline" id="adSlotContent" data-ad-format="auto" data-ad-full-width="true">
+          <span class="ad-label">Reklam</span>
+          <div class="ad-placeholder">Reklam alanı</div>
         </div>
-      </div>
+      </section>
     </main>
 
     <footer class="app-footer">

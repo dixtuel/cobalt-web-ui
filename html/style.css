@@ -292,14 +292,6 @@ a { color: inherit; }
 @media (max-width: 480px) {
   .mode-selector { flex-direction: column; }
   .options-row { grid-template-columns: 1fr; }
-
-  /* Mobilde reklam alanı: masaüstündeki kenar reklamları zaten gizli (bkz. .ad-rail),
-     tek reklam burada, araç kartının dışında ve ayrı bir bölüm gibi durur — indirme
-     akışına karışmaz. */
-  .ad-slot:not(.ad-slot-rail) {
-    min-height: 70px;
-    margin: 2px 0 0;
-  }
 }
 
 .option-item { display: flex; flex-direction: column; gap: 6px; }
@@ -486,10 +478,16 @@ a { color: inherit; }
   border-radius: var(--r-sm);
 }
 
-/* Ad slot — clearly demarcated, self-contained container for Google AdSense */
+/* Ad slot — self-contained container for Google AdSense */
 .ad-slot {
   position: relative;
   z-index: 1;
+  overflow: hidden;
+}
+
+/* Kenar ray reklamları kartın dışında, kendi başlarına durur — demarke edilmiş
+   kutu görünümünü korurlar. */
+.ad-slot-rail {
   border: 1px dashed var(--line);
   border-radius: var(--r-md);
   background: var(--input);
@@ -497,7 +495,6 @@ a { color: inherit; }
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
 }
 
 .ad-slot .ad-label {
@@ -517,6 +514,26 @@ a { color: inherit; }
   color: var(--haze);
   text-align: center;
   padding: 20px;
+}
+
+/* Kart içi reklam satırı — supported-services ile aynı üst ayraç deseniyle, ayrı bir
+   kutu gibi değil kartın doğal bir parçası gibi durur. Yalnız dar ekranda görünür;
+   geniş ekranda reklam alanı zaten kenar rayındadır (bkz. .ad-rail). */
+.ad-slot-inline {
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ad-slot-inline .ad-label { display: none; }
+.ad-slot-inline .ad-placeholder { padding: 4px; opacity: 0.6; }
+
+@media (min-width: 1300px) {
+  .ad-slot-inline { display: none; }
 }
 
 /* Masaüstü kenar reklamları (skyscraper) — yalnız içerik sütunuyla çakışmayacak kadar
