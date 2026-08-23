@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  cobalt-api:
+    image: ghcr.io/imputnet/cobalt:latest
+    container_name: cobalt-api
+    init: true
+    restart: unless-stopped
+    environment:
+      # Bu adresi kendi domain'inizle değiştirin
+      # İndirme linkleri bu URL'ye göre oluşturulur
+      - API_URL=https://your-domain.example/
+      - API_PORT=9000
+    # İsteğe bağlı: cobalt API'nin portunu dış dünyaya açmak istiyorsanız
+    # ports:
+    #   - "9000:9000"
+
+  cobalt-web-ui:
+    image: node:20-alpine
+    container_name: cobalt-web-ui
+    restart: unless-stopped
+    working_dir: /app
+    depends_on:
+      - cobalt-api
+    ports:
+      - "8081:80"
+    environment:
+      - NODE_ENV=production
+      - PORT=80
+      # Docker Compose ağı içinde cobalt-api'ye iç adresle erişilir
+      - COBALT_API=http://cobalt-api:9000
+    volumes:
+      # Projenin tamamını read-only olarak container'a monte et
+      - ./:/app:ro
+    command: node server.js
