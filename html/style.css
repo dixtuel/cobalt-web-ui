@@ -532,6 +532,29 @@ a { color: inherit; }
   padding: 20px;
 }
 
+/* Masaüstü kenar reklamları (skyscraper) — yalnız içerik sütunuyla çakışmayacak kadar
+   geniş ekranlarda gösterilir. min-width eşiği, 640px'lik ana sütun + kenar boşlukları
+   dikkate alınarak hesaplandı. */
+.ad-rail { display: none; }
+
+@media (min-width: 1300px) {
+  .ad-rail {
+    display: block;
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 5;
+  }
+  .ad-rail-left { left: 24px; }
+  .ad-rail-right { right: 24px; }
+  .ad-slot-rail {
+    width: 160px;
+    height: 600px;
+    min-height: 0;
+    flex-direction: column;
+  }
+}
+
 /* Footer */
 .app-footer {
   text-align: center;

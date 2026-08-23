@@ -115,11 +115,17 @@ const server = http.createServer(async (req, res) => {
   }
 
   // 4. Cobalt Tunnel Proxy
+  // Not: istemciyi kimliklendiren başlıklar (IP, cookie, auth vb.) kasıtlı olarak
+  // iletilmez — yalnızca stream'in çalışması için gereken başlıklar geçirilir.
   if (pathname === '/tunnel' || pathname.startsWith('/tunnel/')) {
     try {
       const targetTunnelUrl = `${COBALT_API}${pathname}${parsedUrl.search}`;
+      const safeHeaders = {};
+      for (const key of ['range', 'if-range', 'accept', 'accept-encoding']) {
+        if (req.headers[key]) safeHeaders[key] = req.headers[key];
+      }
       const tunnelRes = await fetch(targetTunnelUrl, {
-        headers: req.headers
+        headers: safeHeaders
       });
 
       const forwardHeaders = {};
