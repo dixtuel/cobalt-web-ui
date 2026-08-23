@@ -39,3 +39,6 @@ logs/
 .cache/
 .dist/
 build/
+
+# Site sahiplik doğrulama dosyaları (Google Search Console vb.) — hesaba özel, repoya girmez
+html/google*.html
