@@ -1,7 +1,7 @@
 # Downloader — Cobalt Web UI
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
-[![Live Demo](https://img.shields.io/badge/Live-downloader.dxtl.com.tr-green.svg?style=flat-square)](https://downloader.dxtl.com.tr)
+[![Live Demo](https://img.shields.io/badge/Live-downloader.sely.tr-green.svg?style=flat-square)](https://downloader.sely.tr)
 
 [imputnet/cobalt](https://github.com/imputnet/cobalt) API'si için bağımsız, özgün ve tam teşekküllü bir web arayüzü — "**Downloader**" markasıyla yayınlanır. Node.js tabanlı, hafif, harici bağımlılığı yok, production-ready.
 
@@ -25,7 +25,7 @@
 ## Canlı Demo
 
 Arayüz "Downloader" adıyla şu adreste canlı olarak çalışmaktadır:
-**https://downloader.dxtl.com.tr**
+**https://downloader.sely.tr**
 
 ## Self-Host Kurulumu
 
