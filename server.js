@@ -229,6 +229,41 @@ const server = http.createServer(async (req, res) => {
           }));
         }
 
+        // Instagram Fallback: cobalt'ın mobil API'si (i.instagram.com) IG
+        // tarafından reddedilip picker/redirect/tunnel dönmediğinde devreye
+        // girer — özellikle Reels'te embed HTML fallback'i yetersiz kalıyor.
+        // ytdlp-service, aynı veriyi web GraphQL uç noktasından (doc_id ile)
+        // çekmeyi dener (bkz. ytdlp-service/app.py instagram_graphql_extract).
+        if (/^https?:\/\/(?:www\.)?instagram\.com\//i.test(url)) {
+          try {
+            const igRes = await fetch(`${YTDLP_API}/instagram-extract`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': clientIp },
+              body: JSON.stringify({ url }),
+              signal: AbortSignal.timeout(25000)
+            });
+            const igData = await igRes.json();
+            if (igData.status === 'ok' && igData.url) {
+              res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+              return res.end(JSON.stringify({
+                status: 'ok',
+                provider: 'generic',
+                title: igData.title || igData.filename || 'Instagram Medyası',
+                thumbnail: igData.thumbnail || '',
+                direct_url: igData.url,
+                qualities: [
+                  { id: 'max', label: igData.media_type === 'photo' ? 'Orijinal Görsel' : 'Orijinal En Yüksek Kalite (MP4)', is_default: true, direct_url: igData.url }
+                ],
+                audio_bitrates: igData.media_type === 'photo' ? [] : [
+                  { id: '320', label: 'En İyi Ses (MP3)', is_default: true }
+                ]
+              }));
+            }
+          } catch (igErr) {
+            // sessizce genel hata yanıtına düş
+          }
+        }
+
         res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
         return res.end(JSON.stringify({
           status: 'ok',

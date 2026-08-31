@@ -6,6 +6,7 @@ diske hiç yazılmaz — video+ses ayrı akış olarak gelirse (modern YouTube'd
 çoğu zaman böyle) ffmpeg iki uzak URL'yi doğrudan HTTP yanıtına pipe'layarak
 gerçek zamanlı birleştirir (cobalt'ın /tunnel mantığıyla aynı prensip).
 """
+import json
 import os
 import re
 import subprocess
@@ -13,6 +14,7 @@ import threading
 import time
 from urllib.parse import quote
 
+import httpx
 import yt_dlp
 from flask import Flask, Response, jsonify, request
 
@@ -28,6 +30,19 @@ DENO_RELAY_URL = (os.environ.get("DENO_RELAY_URL") or "").strip()
 # --- Güvenlik: SSRF ve kaynak-tüketimi koruması -----------------------------
 YOUTUBE_URL_RE = re.compile(r"^https?://([\w-]+\.)?(youtube\.com|youtu\.be|music\.youtube\.com)/", re.I)
 GOOGLEVIDEO_URL_RE = re.compile(r"^https?://([\w-]+\.)?(googlevideo\.com|youtube\.com|ytimg\.com)/", re.I)
+INSTAGRAM_URL_RE = re.compile(r"^https?://(?:www\.)?instagram\.com/(?:[^/]+/)?(p|reel|tv)/([A-Za-z0-9_-]+)", re.I)
+
+# cobalt'ın kullandığı mobil API (i.instagram.com/api/v1/media/.../info/) IG
+# tarafından 401/403 ile reddedilebiliyor (2026-08-31'de doğrulandı) — bu,
+# cobalt'ın embed/captioned HTML fallback'inin Reels için yeterli veri
+# taşımamasıyla birleşince indirme tamamen başarısız oluyor. Bu fallback,
+# şortkodu doğrudan Instagram'ın web GraphQL uç noktasına (doc_id ile,
+# yt-dlp'nin de kullandığı sabit sorgu) çevirerek aynı veriye ulaşır —
+# mobil API'ye hiç dokunmaz.
+_IG_SHORTCODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+_IG_GRAPHQL_DOC_ID = "27130156389949648"
+_IG_APP_ID = "936619743392459"
+_IG_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 _RATE_LIMIT_MAX = int(os.environ.get("RATE_LIMIT_MAX", "30"))
 _RATE_LIMIT_WINDOW_SEC = 60
@@ -149,6 +164,114 @@ def run_extract(url: str, fmt: str = None) -> dict:
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         return ydl.extract_info(url, download=False)
+
+
+def _shortcode_to_media_id(shortcode: str) -> str:
+    media_id = 0
+    for ch in shortcode:
+        media_id = media_id * 64 + _IG_SHORTCODE_ALPHABET.index(ch)
+    return str(media_id)
+
+
+def instagram_graphql_extract(shortcode: str, post_type: str) -> dict:
+    page_url = f"https://www.instagram.com/{post_type}/{shortcode}/"
+    media_id = _shortcode_to_media_id(shortcode)
+
+    client_kwargs = {
+        "headers": {"User-Agent": _IG_USER_AGENT, "Accept-Language": "en-US,en;q=0.9"},
+        "follow_redirects": True,
+        "timeout": 20,
+    }
+    if ADAPTER_ACTIVE:
+        client_kwargs["proxy"] = LOCAL_ADAPTER_PROXY
+        client_kwargs["verify"] = False
+
+    with httpx.Client(**client_kwargs) as client:
+        page = client.get(page_url)
+        page.raise_for_status()
+
+        lsd_match = re.search(r'"LSD",\[\],\{"token":"([^"]+)"', page.text)
+        if not lsd_match:
+            raise RuntimeError("sayfa jetonu (lsd) bulunamadı")
+        csrf = client.cookies.get("csrftoken")
+        if not csrf:
+            raise RuntimeError("csrf jetonu bulunamadı")
+
+        gql_headers = {
+            "Origin": "https://www.instagram.com",
+            "Referer": page_url,
+            "X-CSRFToken": csrf,
+            "X-FB-LSD": lsd_match.group(1),
+            "X-FB-Friendly-Name": "PolarisLoggedOutDesktopWWWPostRootContentQuery",
+            "X-Requested-With": "XMLHttpRequest",
+            "X-IG-App-ID": _IG_APP_ID,
+            "X-ASBD-ID": "129477",
+            "X-IG-WWW-Claim": "0",
+        }
+        gql_data = {
+            "lsd": lsd_match.group(1),
+            "fb_api_caller_class": "RelayModern",
+            "fb_api_req_friendly_name": "PolarisLoggedOutDesktopWWWPostRootContentQuery",
+            "server_timestamps": "true",
+            "variables": json.dumps({"media_id": media_id}, separators=(",", ":")),
+            "doc_id": _IG_GRAPHQL_DOC_ID,
+        }
+        gql_res = client.post("https://www.instagram.com/api/graphql", headers=gql_headers, data=gql_data)
+        gql_res.raise_for_status()
+        payload = gql_res.json()
+
+    media = (payload.get("data") or {}).get("xig_polaris_media")
+    if not media:
+        raise RuntimeError("gönderi bulunamadı")
+
+    gated = media.get("if_not_gated_logged_out")
+    if not gated:
+        raise RuntimeError("giriş gerektiren veya kısıtlı içerik")
+
+    title = ((gated.get("caption") or {}).get("text") or "").strip() or f"instagram_{shortcode}"
+
+    if gated.get("media_type") == 2:
+        video_versions = gated.get("video_versions") or []
+        if not video_versions:
+            raise RuntimeError("video akışı bulunamadı")
+        best = max(video_versions, key=lambda v: (v.get("width") or 0) * (v.get("height") or 0))
+        return {"media_type": "video", "url": best["url"], "title": title, "thumbnail": gated.get("display_uri") or ""}
+
+    candidates = ((gated.get("image_versions2") or {}).get("candidates")) or []
+    if not candidates:
+        raise RuntimeError("görsel akışı bulunamadı")
+    best = max(candidates, key=lambda c: (c.get("width") or 0) * (c.get("height") or 0))
+    return {"media_type": "photo", "url": best["url"], "title": title, "thumbnail": best["url"]}
+
+
+@app.route("/instagram-extract", methods=["POST"])
+def instagram_extract():
+    if rate_limited():
+        return jsonify({"status": "error", "error": {"code": "rate_limited", "message": "Çok fazla istek, biraz bekleyin."}}), 429
+
+    data = request.get_json(silent=True) or {}
+    url = (data.get("url") or "").strip()
+    match = INSTAGRAM_URL_RE.match(url)
+    if not url or not match:
+        return jsonify({"status": "error", "error": {"code": "invalid_url", "message": "Geçerli bir Instagram gönderi/reel linki gerekli"}}), 400
+
+    post_type, shortcode = match.group(1).lower(), match.group(2)
+
+    try:
+        result = instagram_graphql_extract(shortcode, post_type)
+    except Exception as exc:
+        return jsonify({"status": "error", "error": {"code": "extract_failed", "message": str(exc)}}), 502
+
+    ext = "mp4" if result["media_type"] == "video" else "jpg"
+    return jsonify({
+        "status": "ok",
+        "provider": "instagram",
+        "media_type": result["media_type"],
+        "title": result["title"],
+        "thumbnail": result["thumbnail"],
+        "url": result["url"],
+        "filename": f"instagram_{shortcode}.{ext}",
+    })
 
 
 @app.route("/", methods=["GET"])
